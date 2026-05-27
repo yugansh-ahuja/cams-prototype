@@ -1,16 +1,36 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
-import { type AssetDefinition } from '../../data/mockData'
+import { type AssetDefinition, type DefinitionSource } from '../../data/mockData'
+
+// ── Source chip (mirrors DefinitionList) ──────────────────────────────────────
+function SourceChip({ source }: { source: DefinitionSource }) {
+  const cfg: Record<DefinitionSource, { label: string; color: string }> = {
+    manual:                { label: 'Manual',       color: '#6366f1' },
+    'csv-import':          { label: 'CSV Import',   color: '#0891b2' },
+    'api-ingestion':       { label: 'API Ingest',   color: '#7c3aed' },
+    'manufacturer-portal': { label: 'Manufacturer', color: '#059669' },
+  }
+  const { label, color } = cfg[source]
+  return (
+    <span style={{
+      fontSize: 11, padding: '2px 8px', borderRadius: 10,
+      background: `${color}18`, color, border: `1px solid ${color}40`,
+      fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-block',
+    }}>
+      {label}
+    </span>
+  )
+}
 
 const CATEGORIES = ['Pumps', 'Security', 'Life Safety', 'Electrical', 'HVAC', 'Mechanical', 'Plumbing', 'IT Infrastructure', 'Other']
 
-type Modal = null | 'confirm-publish' | 'confirm-archive' | 'confirm-restore'
+type Modal = null | 'confirm-publish' | 'confirm-archive' | 'confirm-restore' | 'confirm-new-version'
 
 export default function DefinitionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { definitions, assets, updateDefinition, addToast } = useApp()
+  const { definitions, assets, updateDefinition, publishDefinition, createNewVersion, archiveDefinition, addToast } = useApp()
 
   // Edit mode (Draft only — HC-6345)
   const [isEditing, setIsEditing] = useState(false)
@@ -35,6 +55,20 @@ export default function DefinitionDetail() {
   }
 
   const linkedAssetCount = assets.filter(a => a.linkedDefinitionId === def.id).length
+
+  // Family: all versions sharing the same baseDefinitionId
+  const familyId = def.baseDefinitionId ?? def.id
+  const familyVersions = definitions
+    .filter(d => (d.baseDefinitionId ?? d.id) === familyId)
+    .sort((a, b) => b.version - a.version)
+
+  // The currently Active sibling (for messaging during publish)
+  const activeVersion = definitions.find(
+    d => d.id !== def.id &&
+         (d.baseDefinitionId ?? d.id) === familyId &&
+         d.state === 'Published' &&
+         d.versionState === 'Active'
+  )
 
   // ── Edit mode (HC-6345) ───────────────────────────────────────────────────────
 
@@ -95,42 +129,40 @@ export default function DefinitionDetail() {
     setModal('confirm-publish')
   }
 
+  // HC-6478: atomic publish — deactivates current Active sibling, activates this definition
   const doPublish = () => {
-    const updated: AssetDefinition = {
-      ...def,
-      state: 'Published',
-      versionState: 'Active',
-      publishedDate: new Date().toISOString().split('T')[0],
-    }
-    updateDefinition(updated)
+    publishDefinition(def.id)
     setModal(null)
-    addToast({ type: 'success', title: 'Definition Published', message: `${def.name} is now live and active in the catalog.` })
+    if (activeVersion) {
+      addToast({
+        type: 'success',
+        title: 'Definition Published',
+        message: `v${def.version} is now Active. v${activeVersion.version} has been set to Inactive.`,
+      })
+    } else {
+      addToast({ type: 'success', title: 'Definition Published', message: `${def.name} v${def.version} is now live and active in the catalog.` })
+    }
   }
 
   const doArchive = () => {
-    const updated: AssetDefinition = {
-      ...def,
-      state: 'Archived',
-      versionState: undefined,
-      archivedDate: new Date().toISOString().split('T')[0],
-    }
-    updateDefinition(updated)
+    archiveDefinition(def.id)
     setModal(null)
     addToast({ type: 'info', title: 'Definition Archived', message: `${def.name} has been archived. Existing asset links are preserved.` })
   }
 
   // HC-6845: Restore archived definition back to Published + Active
   const doRestore = () => {
-    const updated: AssetDefinition = {
-      ...def,
-      state: 'Published',
-      versionState: 'Active',
-      publishedDate: new Date().toISOString().split('T')[0],
-      archivedDate: undefined,
-    }
-    updateDefinition(updated)
+    publishDefinition(def.id)
     setModal(null)
     addToast({ type: 'success', title: 'Definition Restored', message: `${def.name} has been restored and is now active in the catalog.` })
+  }
+
+  // HC-6057 / HC-7259: Create new Draft version at N+1
+  const doCreateNewVersion = () => {
+    const newId = createNewVersion(def.id)
+    setModal(null)
+    addToast({ type: 'info', title: 'New Version Created', message: `v${def.version + 1} Draft has been created. Edit and publish when ready.` })
+    navigate(`/internal/definitions/${newId}`)
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────────
@@ -191,6 +223,13 @@ export default function DefinitionDetail() {
     return <span className="state-badge draft">○ Draft</span>
   }
 
+  const versionStateBadge = (d: AssetDefinition) => {
+    if (d.state === 'Draft') return <span className="state-badge draft">○ Draft</span>
+    if (d.state === 'Archived') return <span className="state-badge archived">◎ Archived</span>
+    if (d.versionState === 'Active') return <span className="state-badge active">◉ Active</span>
+    return <span className="state-badge inactive">○ Inactive</span>
+  }
+
   return (
     <>
       {/* Breadcrumb */}
@@ -233,8 +272,20 @@ export default function DefinitionDetail() {
             </>
           )}
 
-          {/* Published actions */}
-          {def.state === 'Published' && (
+          {/* Published + Active actions — HC-6057: Create New Version */}
+          {def.state === 'Published' && def.versionState === 'Active' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setModal('confirm-new-version')} style={{ marginLeft: 10 }}>
+                Create New Version
+              </button>
+              <button className="btn btn-secondary" onClick={() => setModal('confirm-archive')} style={{ marginLeft: 6 }}>
+                Archive
+              </button>
+            </>
+          )}
+
+          {/* Published + Inactive: archive only */}
+          {def.state === 'Published' && def.versionState === 'Inactive' && (
             <button className="btn btn-secondary" onClick={() => setModal('confirm-archive')} style={{ marginLeft: 10 }}>
               Archive
             </button>
@@ -267,7 +318,16 @@ export default function DefinitionDetail() {
       {def.state === 'Draft' && !isEditing && (
         <div className="info-box info">
           <span>✎</span>
-          <span>This definition is a <strong>Draft</strong>. Click <strong>Edit Draft</strong> to update its information, or <strong>Publish</strong> to make it available in the customer catalog.</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span>
+              This definition is a <strong>Draft</strong> ingested via{' '}
+              <SourceChip source={def.source} />.{' '}
+              Click <strong>Edit Draft</strong> to update its information, or <strong>Publish</strong> to make it available in the customer catalog.
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--theme-color-soft-text)' }}>
+              Drafts are only visible to internal catalog admins. Customers see only Published + Active versions.
+            </span>
+          </div>
         </div>
       )}
       {def.state === 'Draft' && isEditing && (
@@ -279,7 +339,13 @@ export default function DefinitionDetail() {
       {def.state === 'Published' && def.versionState === 'Active' && (
         <div className="info-box" style={{ background: 'var(--success-bg)', borderColor: 'var(--success-bdr)', color: 'var(--success)' }}>
           <span>✓</span>
-          <span>This definition is <strong>Published and Active</strong>. It is visible in the customer catalog and customers can commission assets from it. This definition is read-only.</span>
+          <span>This is the <strong>Active</strong> version in the customer catalog. Customers can browse and commission assets from it. To update specifications, click <strong>Create New Version</strong> to start a new Draft at v{def.version + 1}.</span>
+        </div>
+      )}
+      {def.state === 'Published' && def.versionState === 'Inactive' && (
+        <div className="info-box" style={{ background: 'var(--theme-color-ghost-selected)', borderColor: 'var(--theme-color-soft-bdr)' }}>
+          <span>○</span>
+          <span>This version has been <strong>superseded</strong> by a newer Active version in the same family. It is no longer shown in the customer catalog and is read-only. Existing asset links are preserved.</span>
         </div>
       )}
       {def.state === 'Archived' && (
@@ -372,6 +438,10 @@ export default function DefinitionDetail() {
                 <div>
                   <div className="detail-label">Version</div>
                   <div className="detail-value">v{def.version}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Source Channel</div>
+                  <div className="detail-value"><SourceChip source={def.source} /></div>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div className="detail-label">Description</div>
@@ -468,6 +538,59 @@ export default function DefinitionDetail() {
             </div>
           )}
 
+          {/* ── Version History panel (HC-6120) ─────────────────────────────────── */}
+          {familyVersions.length > 1 && (
+            <div className="card">
+              <h3 className="card-title">Version History</h3>
+              <p style={{ fontSize: 12, color: 'var(--theme-color-soft-text)', marginBottom: 12 }}>
+                All versions of the <strong>{def.name}</strong> definition family. Only the Active version is visible in the customer catalog.
+              </p>
+              <table className="data-table" style={{ marginTop: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Version</th>
+                    <th>State</th>
+                    <th>Source</th>
+                    <th>MSRP</th>
+                    <th>Created</th>
+                    <th>Published</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {familyVersions.map(v => (
+                    <tr
+                      key={v.id}
+                      style={v.id === def.id ? { background: 'var(--theme-color-ghost-selected)', fontWeight: 500 } : {}}
+                    >
+                      <td>
+                        v{v.version}
+                        {v.id === def.id && (
+                          <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--theme-color-soft-text)', fontWeight: 400 }}>(this version)</span>
+                        )}
+                      </td>
+                      <td>{versionStateBadge(v)}</td>
+                      <td><SourceChip source={v.source} /></td>
+                      <td>${v.msrp?.toLocaleString()}</td>
+                      <td>{v.createdDate}</td>
+                      <td>{v.publishedDate ?? '—'}</td>
+                      <td>
+                        {v.id !== def.id ? (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => navigate(`/internal/definitions/${v.id}`)}
+                          >
+                            {v.state === 'Draft' ? 'Review' : 'View'}
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* Lifecycle history */}
           <div className="card">
             <h3 className="card-title">Lifecycle History</h3>
@@ -517,9 +640,12 @@ export default function DefinitionDetail() {
               <div className="info-box info">
                 <span>ℹ</span>
                 <div>
-                  <strong>Publish "{def.name}" to the catalog?</strong>
+                  <strong>Publish "{def.name}" v{def.version} to the catalog?</strong>
                   <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-                    This definition will become <strong>Active</strong> in the customer catalog immediately. Customers will be able to browse it and commission assets from it.
+                    This version will become <strong>Active</strong> in the customer catalog immediately.
+                    {activeVersion && (
+                      <> v{activeVersion.version} (currently Active) will automatically be set to <strong>Inactive</strong>.</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -538,6 +664,39 @@ export default function DefinitionDetail() {
         </div>
       )}
 
+      {/* ── Confirm New Version modal (HC-6057) ──────────────────────────────── */}
+      {modal === 'confirm-new-version' && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModal(null) }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Create New Version</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="info-box info">
+                <span>ℹ</span>
+                <div>
+                  <strong>Create v{def.version + 1} of "{def.name}"?</strong>
+                  <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                    A new <strong>Draft</strong> will be created at v{def.version + 1}, pre-populated with the current specifications.
+                    The current <strong>Active</strong> version (v{def.version}) will remain live until you publish the new version.
+                    This is the recommended way to update a published definition.
+                  </p>
+                </div>
+              </div>
+              <div className="detail-grid" style={{ marginTop: 12 }}>
+                <div><div className="detail-label">Current Version</div><div className="detail-value">v{def.version} (Active)</div></div>
+                <div><div className="detail-label">New Version</div><div className="detail-value">v{def.version + 1} (Draft)</div></div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={doCreateNewVersion}>Create v{def.version + 1} Draft</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Confirm Archive modal ─────────────────────────────────────────────── */}
       {modal === 'confirm-archive' && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModal(null) }}>
@@ -550,7 +709,7 @@ export default function DefinitionDetail() {
               <div className="info-box warning">
                 <span>⚠</span>
                 <div>
-                  <strong>Archive "{def.name}"?</strong>
+                  <strong>Archive "{def.name}" v{def.version}?</strong>
                   <p style={{ margin: '6px 0 0', fontSize: 12 }}>
                     This definition will be removed from the customer catalog. <strong>Existing commissioned asset links are preserved</strong> and will continue to reference this definition.
                     You can <strong>restore</strong> this definition later to make it active again.
@@ -585,7 +744,10 @@ export default function DefinitionDetail() {
                 <div>
                   <strong>Restore "{def.name}" to the catalog?</strong>
                   <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-                    This definition will be set back to <strong>Published &amp; Active</strong> and will reappear in the customer catalog immediately. Customers will be able to commission new assets from it.
+                    This definition will be set back to <strong>Published &amp; Active</strong> and will reappear in the customer catalog immediately.
+                    {activeVersion && (
+                      <> v{activeVersion.version} (currently Active) will automatically be set to <strong>Inactive</strong>.</>
+                    )}
                   </p>
                 </div>
               </div>

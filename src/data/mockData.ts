@@ -1,5 +1,6 @@
 export type DefinitionState = 'Draft' | 'Published' | 'Archived';
 export type VersionState = 'Active' | 'Inactive';
+export type DefinitionSource = 'manual' | 'csv-import' | 'api-ingestion' | 'manufacturer-portal';
 
 export interface AssetDefinition {
   id: string;
@@ -14,6 +15,10 @@ export interface AssetDefinition {
   state: DefinitionState;
   versionState?: VersionState;
   version: number;
+  /** Shared identifier linking all versions of the same definition family. */
+  baseDefinitionId?: string;
+  /** The channel through which this definition entered the system. */
+  source: DefinitionSource;
   createdDate: string;
   publishedDate?: string;
   archivedDate?: string;
@@ -45,6 +50,7 @@ export interface WorkOrder {
 }
 
 export const definitions: AssetDefinition[] = [
+  // ── Booster Pump Package family (v1 csv-import → v2 api-ingestion → v3 manual Active → v4 manufacturer-portal Draft) ─
   {
     id: 'def-001',
     name: 'Booster Pump Package',
@@ -58,6 +64,8 @@ export const definitions: AssetDefinition[] = [
     state: 'Published',
     versionState: 'Active',
     version: 3,
+    baseDefinitionId: 'def-001',
+    source: 'manual',
     createdDate: '2024-11-01',
     publishedDate: '2024-11-15',
     specifications: [
@@ -69,6 +77,79 @@ export const definitions: AssetDefinition[] = [
       { label: 'Seal Type', value: 'Mechanical seal' },
     ],
   },
+  {
+    id: 'def-001-v4-draft',
+    name: 'Booster Pump Package',
+    assetClass: 'Equipment',
+    category: 'Pumps',
+    manufacturer: 'Grundfos',
+    model: 'CM-10',
+    description: 'Next-generation high-efficiency centrifugal booster pump with smart monitoring and IE4 motor.',
+    expectedLifespan: 15,
+    msrp: 4500,
+    state: 'Draft',
+    version: 4,
+    baseDefinitionId: 'def-001',
+    source: 'manufacturer-portal',
+    createdDate: '2025-05-01',
+    specifications: [
+      { label: 'Flow Rate', value: '12 m³/h' },
+      { label: 'Head', value: '50 m' },
+      { label: 'Motor Rating', value: '2.2 kW, 400V IE4' },
+      { label: 'Materials', value: 'Stainless Steel' },
+      { label: 'Connection Size', value: 'DN80' },
+      { label: 'Seal Type', value: 'Mechanical seal' },
+      { label: 'Smart Monitoring', value: 'Grundfos GO app compatible' },
+    ],
+  },
+  {
+    id: 'def-001-v2',
+    name: 'Booster Pump Package',
+    assetClass: 'Equipment',
+    category: 'Pumps',
+    manufacturer: 'Grundfos',
+    model: 'CM-10',
+    description: 'High-efficiency centrifugal booster pump for pressure boosting.',
+    expectedLifespan: 15,
+    msrp: 4000,
+    state: 'Published',
+    versionState: 'Inactive',
+    version: 2,
+    baseDefinitionId: 'def-001',
+    source: 'api-ingestion',
+    createdDate: '2024-10-01',
+    publishedDate: '2024-10-20',
+    specifications: [
+      { label: 'Flow Rate', value: '10 m³/h' },
+      { label: 'Head', value: '45 m' },
+      { label: 'Motor Rating', value: '2 kW, 400V IE3' },
+      { label: 'Connection Size', value: 'DN80' },
+    ],
+  },
+  {
+    id: 'def-001-v1',
+    name: 'Booster Pump Package',
+    assetClass: 'Equipment',
+    category: 'Pumps',
+    manufacturer: 'Grundfos',
+    model: 'CM-10',
+    description: 'Centrifugal booster pump for water supply pressure boosting.',
+    expectedLifespan: 12,
+    msrp: 3800,
+    state: 'Published',
+    versionState: 'Inactive',
+    version: 1,
+    baseDefinitionId: 'def-001',
+    source: 'csv-import',
+    createdDate: '2024-09-01',
+    publishedDate: '2024-09-15',
+    specifications: [
+      { label: 'Flow Rate', value: '10 m³/h' },
+      { label: 'Motor Rating', value: '2 kW, 400V' },
+    ],
+  },
+
+  // ── Network PTZ Camera family (v1 csv-import → v2 api-ingestion Active) ──────
   {
     id: 'def-002',
     name: 'Network PTZ Camera',
@@ -82,6 +163,8 @@ export const definitions: AssetDefinition[] = [
     state: 'Published',
     versionState: 'Active',
     version: 2,
+    baseDefinitionId: 'def-002',
+    source: 'api-ingestion',
     createdDate: '2025-01-10',
     publishedDate: '2025-02-01',
     specifications: [
@@ -91,6 +174,31 @@ export const definitions: AssetDefinition[] = [
       { label: 'Protection', value: 'IP66/NEMA 4X' },
     ],
   },
+  {
+    id: 'def-002-v1',
+    name: 'Network PTZ Camera',
+    assetClass: 'Equipment',
+    category: 'Security',
+    manufacturer: 'Axis Communications',
+    model: 'Q6115-E',
+    description: 'Outdoor PTZ network camera for perimeter surveillance.',
+    expectedLifespan: 8,
+    msrp: 3500,
+    state: 'Published',
+    versionState: 'Inactive',
+    version: 1,
+    baseDefinitionId: 'def-002',
+    source: 'csv-import',
+    createdDate: '2024-12-01',
+    publishedDate: '2025-01-01',
+    specifications: [
+      { label: 'Resolution', value: '720p HD' },
+      { label: 'Zoom', value: '20x optical' },
+      { label: 'Protection', value: 'IP66' },
+    ],
+  },
+
+  // ── Fire Alarm Control Panel (manufacturer-portal, v1 Active, single version) ─
   {
     id: 'def-003',
     name: 'Fire Alarm Control Panel',
@@ -104,6 +212,8 @@ export const definitions: AssetDefinition[] = [
     state: 'Published',
     versionState: 'Active',
     version: 1,
+    baseDefinitionId: 'def-003',
+    source: 'manufacturer-portal',
     createdDate: '2024-08-15',
     publishedDate: '2024-09-01',
     specifications: [
@@ -113,6 +223,8 @@ export const definitions: AssetDefinition[] = [
       { label: 'Standards', value: 'UL 864, ULC-S527' },
     ],
   },
+
+  // ── Power Monitoring Unit (csv-import, Draft v1) ───────────────────────────
   {
     id: 'def-004',
     name: 'Power Monitoring Unit',
@@ -125,6 +237,8 @@ export const definitions: AssetDefinition[] = [
     msrp: 2900,
     state: 'Draft',
     version: 1,
+    baseDefinitionId: 'def-004',
+    source: 'csv-import',
     createdDate: '2025-03-20',
     specifications: [
       { label: 'Accuracy', value: 'Class 0.1S' },
@@ -132,6 +246,8 @@ export const definitions: AssetDefinition[] = [
       { label: 'Communications', value: 'Modbus, BACnet, Ethernet' },
     ],
   },
+
+  // ── Rooftop HVAC Unit (api-ingestion, Draft v1) ────────────────────────────
   {
     id: 'def-005',
     name: 'Rooftop HVAC Unit',
@@ -144,6 +260,8 @@ export const definitions: AssetDefinition[] = [
     msrp: 28000,
     state: 'Draft',
     version: 1,
+    baseDefinitionId: 'def-005',
+    source: 'api-ingestion',
     createdDate: '2025-04-05',
     specifications: [
       { label: 'Cooling Capacity', value: '20 Ton' },
@@ -152,6 +270,8 @@ export const definitions: AssetDefinition[] = [
       { label: 'Electrical', value: '460V/3Ph/60Hz' },
     ],
   },
+
+  // ── Generator 500kVA family (v1 manual Inactive → v2 manual Archived) ────
   {
     id: 'def-006',
     name: 'Generator 500kVA',
@@ -164,6 +284,8 @@ export const definitions: AssetDefinition[] = [
     msrp: 85000,
     state: 'Archived',
     version: 2,
+    baseDefinitionId: 'def-006',
+    source: 'manual',
     createdDate: '2024-06-01',
     publishedDate: '2024-06-20',
     archivedDate: '2025-01-15',
@@ -172,6 +294,28 @@ export const definitions: AssetDefinition[] = [
       { label: 'Standby Power', value: '550 kVA' },
       { label: 'Fuel Type', value: 'Diesel' },
       { label: 'Certification', value: 'UL Listed' },
+    ],
+  },
+  {
+    id: 'def-006-v1',
+    name: 'Generator 500kVA',
+    assetClass: 'Equipment',
+    category: 'Electrical',
+    manufacturer: 'Cummins',
+    model: 'C500D5',
+    description: 'Diesel prime power generator for continuous duty applications.',
+    expectedLifespan: 25,
+    msrp: 82000,
+    state: 'Published',
+    versionState: 'Inactive',
+    version: 1,
+    baseDefinitionId: 'def-006',
+    source: 'manual',
+    createdDate: '2024-05-01',
+    publishedDate: '2024-05-25',
+    specifications: [
+      { label: 'Prime Power', value: '500 kVA' },
+      { label: 'Fuel Type', value: 'Diesel' },
     ],
   },
 ];

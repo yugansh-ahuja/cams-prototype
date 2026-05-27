@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { definitions as initialDefinitions, assets as initialAssets, workOrders as initialWorkOrders, type AssetDefinition, type Asset, type WorkOrder } from '../data/mockData'
+import { definitions as initialDefinitions, assets as initialAssets, workOrders as initialWorkOrders, type AssetDefinition, type Asset, type WorkOrder, type DefinitionSource } from '../data/mockData'
 
 export type Persona = 'internal-admin' | 'customer-admin' | 'technician' | null
 
@@ -18,6 +18,23 @@ interface AppContextType {
   workOrders: WorkOrder[]
   updateDefinition: (def: AssetDefinition) => void
   addDefinition: (def: AssetDefinition) => void
+  /**
+   * Atomically publishes a Draft definition and deactivates the previously Active
+   * version in the same family (HC-6478). The target definition transitions to
+   * Published + Active; any sibling that was Published + Active becomes Inactive.
+   */
+  publishDefinition: (defId: string) => void
+  /**
+   * Clones a Published+Active definition as a new Draft at version N+1 (HC-6057).
+   * Returns the new definition's id so the caller can navigate to it.
+   * @param source The ingestion channel for the new draft (default 'manual').
+   */
+  createNewVersion: (defId: string, source?: DefinitionSource) => string
+  /**
+   * Archives a definition — sets state to 'Archived', clears versionState, records archivedDate.
+   * Asset links are preserved. Mirrors the doArchive logic centralised for reuse (HC-7521).
+   */
+  archiveDefinition: (defId: string) => void
   updateAsset: (asset: Asset) => void
   addAsset: (asset: Asset) => void
   toasts: Toast[]
@@ -42,6 +59,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDefinitions(prev => [...prev, def])
   }
 
+  /**
+   * HC-6478 — Atomic publish: activate the target definition and simultaneously
+   * deactivate any sibling that is currently Published+Active. This is done in
+   * a single setDefinitions call so there is never a moment with 0 or 2 Active
+   * versions in the same family.
+   */
+  const publishDefinition = (defId: string) => {
+    setDefinitions(prev => {
+      const def = prev.find(d => d.id === defId)
+      if (!def) return prev
+      const familyId = def.baseDefinitionId ?? def.id
+      return prev.map(d => {
+        // Deactivate the current Active sibling
+        if (
+          d.id !== defId &&
+          (d.baseDefinitionId ?? d.id) === familyId &&
+          d.state === 'Published' &&
+          d.versionState === 'Active'
+        ) {
+          return { ...d, versionState: 'Inactive' as const }
+        }
+        // Activate the target definition
+        if (d.id === defId) {
+          return {
+            ...d,
+            state: 'Published' as const,
+            versionState: 'Active' as const,
+            publishedDate: new Date().toISOString().split('T')[0],
+          }
+        }
+        return d
+      })
+    })
+  }
+
+  /**
+   * HC-6057 / HC-7259 — Create a new Draft version at N+1.
+   * The new definition is a clone of the source with a fresh id, incremented
+   * version number, state=Draft, and cleared publish/archive timestamps.
+   * @param source Ingestion channel for the new draft (default 'manual').
+   * Returns the new definition's id.
+   */
+  const createNewVersion = (defId: string, source: DefinitionSource = 'manual'): string => {
+    let newId = ''
+    setDefinitions(prev => {
+      const def = prev.find(d => d.id === defId)
+      if (!def) return prev
+      const familyId = def.baseDefinitionId ?? def.id
+      const family = prev.filter(d => (d.baseDefinitionId ?? d.id) === familyId)
+      const nextVersion = Math.max(...family.map(d => d.version)) + 1
+      newId = `def-${Date.now()}`
+      const newDef: AssetDefinition = {
+        ...def,
+        id: newId,
+        version: nextVersion,
+        state: 'Draft',
+        versionState: undefined,
+        source,
+        createdDate: new Date().toISOString().split('T')[0],
+        publishedDate: undefined,
+        archivedDate: undefined,
+        baseDefinitionId: familyId,
+      }
+      return [...prev, newDef]
+    })
+    return newId
+  }
+
+  /**
+   * HC-7521 — Centralised archive action.
+   * Sets state to 'Archived', clears versionState, records archivedDate.
+   */
+  const archiveDefinition = (defId: string) => {
+    setDefinitions(prev => prev.map(d => {
+      if (d.id !== defId) return d
+      return {
+        ...d,
+        state: 'Archived' as const,
+        versionState: undefined,
+        archivedDate: new Date().toISOString().split('T')[0],
+      }
+    }))
+  }
+
   const updateAsset = (updated: Asset) => {
     setAssets(prev => prev.map(a => a.id === updated.id ? updated : a))
   }
@@ -64,8 +165,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       persona, setPersona,
       definitions, assets, workOrders,
-      updateDefinition, addDefinition, updateAsset, addAsset,
-      toasts, addToast, removeToast
+      updateDefinition, addDefinition, publishDefinition, createNewVersion, archiveDefinition,
+      updateAsset, addAsset,
+      toasts, addToast, removeToast,
     }}>
       {children}
     </AppContext.Provider>
