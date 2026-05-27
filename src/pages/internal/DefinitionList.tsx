@@ -1,42 +1,18 @@
 import { Fragment, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
-import { type AssetDefinition, type DefinitionState, type DefinitionSource, type VersionState } from '../../data/mockData'
-
-// ── Source chip ────────────────────────────────────────────────────────────────
-function SourceChip({ source }: { source: DefinitionSource }) {
-  const cfg: Record<DefinitionSource, { label: string; color: string }> = {
-    manual:                { label: 'Manual',       color: '#6366f1' },
-    'csv-import':          { label: 'CSV Import',   color: '#0891b2' },
-    'api-ingestion':       { label: 'API Ingest',   color: '#7c3aed' },
-    'manufacturer-portal': { label: 'Manufacturer', color: '#059669' },
-  }
-  const { label, color } = cfg[source]
-  return (
-    <span style={{
-      fontSize: 11, padding: '2px 7px', borderRadius: 10,
-      background: `${color}18`, color, border: `1px solid ${color}40`,
-      fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-block',
-    }}>
-      {label}
-    </span>
-  )
-}
+import { type AssetDefinition, type DefinitionState, type VersionState } from '../../data/mockData'
 
 // ── State badge ────────────────────────────────────────────────────────────────
 function StateBadge({ state, versionState }: { state: DefinitionState; versionState?: VersionState }) {
-  if (state === 'Published' && versionState === 'Active') {
+  if (state === 'Published' && versionState === 'Active')
     return <span className="state-badge active">● Active</span>
-  }
-  if (state === 'Published' && versionState === 'Inactive') {
+  if (state === 'Published' && versionState === 'Inactive')
     return <span className="state-badge inactive">◎ Inactive</span>
-  }
-  if (state === 'Published') {
+  if (state === 'Published')
     return <span className="state-badge published">● Published</span>
-  }
-  if (state === 'Draft') {
+  if (state === 'Draft')
     return <span className="state-badge draft">○ Draft</span>
-  }
   return <span className="state-badge archived">◎ Archived</span>
 }
 
@@ -50,8 +26,7 @@ export default function DefinitionList() {
 
   // ── Family helpers ───────────────────────────────────────────────────────────
 
-  /** Returns the single "representative" definition per family for collapsed view.
-   *  Priority: Active > Draft (highest version) > Inactive (highest version) > Archived (highest version) */
+  /** One representative per family: Active > Draft (highest v) > Inactive (highest v) > Archived (highest v) */
   const computeLatestPerFamily = (defs: AssetDefinition[]): AssetDefinition[] => {
     const families = new Map<string, AssetDefinition[]>()
     for (const d of defs) {
@@ -73,41 +48,31 @@ export default function DefinitionList() {
     return result
   }
 
-  /** Total members in the family that contains this definition. */
   const familySize = (def: AssetDefinition): number => {
     const fid = def.baseDefinitionId ?? def.id
     return definitions.filter(d => (d.baseDefinitionId ?? d.id) === fid).length
   }
 
-  /** How many Drafts are pending review in the family. */
-  const familyPendingCount = (def: AssetDefinition): number => {
-    const fid = def.baseDefinitionId ?? def.id
-    return definitions.filter(d => (d.baseDefinitionId ?? d.id) === fid && d.state === 'Draft').length
-  }
-
-  // ── Search + state filter ────────────────────────────────────────────────────
+  // ── Filters ──────────────────────────────────────────────────────────────────
   const matchesFilters = (d: AssetDefinition) => {
     const q = search.toLowerCase()
     const matchSearch = !q ||
       d.name.toLowerCase().includes(q) ||
       d.manufacturer.toLowerCase().includes(q) ||
       d.category.toLowerCase().includes(q) ||
-      d.model.toLowerCase().includes(q) ||
-      d.source.toLowerCase().includes(q)
+      d.model.toLowerCase().includes(q)
     const matchState =
       filterState === 'all' ||
-      (filterState === 'draft'     && d.state === 'Draft') ||
-      (filterState === 'active'    && d.state === 'Published' && d.versionState === 'Active') ||
-      (filterState === 'inactive'  && d.state === 'Published' && d.versionState === 'Inactive') ||
-      (filterState === 'published' && d.state === 'Published') ||
-      (filterState === 'archived'  && d.state === 'Archived')
+      (filterState === 'draft'    && d.state === 'Draft') ||
+      (filterState === 'active'   && d.state === 'Published' && d.versionState === 'Active') ||
+      (filterState === 'inactive' && d.state === 'Published' && d.versionState === 'Inactive') ||
+      (filterState === 'archived' && d.state === 'Archived')
     return matchSearch && matchState
   }
 
-  // ── Build display list ───────────────────────────────────────────────────────
+  // ── Display list ─────────────────────────────────────────────────────────────
   const displayList: AssetDefinition[] = (() => {
-    if (showAllVersions) {
-      // All versions grouped by family (desc version within group), filtered
+    if (showAllVersions && filterState === 'all') {
       const all = definitions.filter(matchesFilters)
       const families = new Map<string, AssetDefinition[]>()
       for (const d of all) {
@@ -122,26 +87,31 @@ export default function DefinitionList() {
       return grouped
     }
     if (filterState === 'all') {
-      // Collapsed: one representative per family, then search filter
       return computeLatestPerFamily(definitions).filter(matchesFilters)
     }
-    // Specific state filter: show ALL matching records so e.g. Archived v2 is never
-    // hidden behind a different-state family representative
     return definitions.filter(matchesFilters)
   })()
 
-  // ── Summary counts ───────────────────────────────────────────────────────────
+  // ── Tab counts ───────────────────────────────────────────────────────────────
   const totalFamilies = new Set(definitions.map(d => d.baseDefinitionId ?? d.id)).size
-  const pendingReview = definitions.filter(d => d.state === 'Draft').length
+  const draftCount    = definitions.filter(d => d.state === 'Draft').length
   const activeCount   = definitions.filter(d => d.state === 'Published' && d.versionState === 'Active').length
   const inactiveCount = definitions.filter(d => d.state === 'Published' && d.versionState === 'Inactive').length
   const archivedCount = definitions.filter(d => d.state === 'Archived').length
 
-  // Track rendered families (for group-header row in "show all" mode)
+  const tabs = [
+    { key: 'all',      label: 'All',      count: totalFamilies },
+    { key: 'draft',    label: 'Draft',    count: draftCount    },
+    { key: 'active',   label: 'Active',   count: activeCount   },
+    { key: 'inactive', label: 'Inactive', count: inactiveCount },
+    { key: 'archived', label: 'Archived', count: archivedCount },
+  ] as const
+
   const renderedFamilies = new Set<string>()
 
   return (
     <>
+      {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Asset Definitions</h1>
@@ -154,117 +124,80 @@ export default function DefinitionList() {
         </div>
       </div>
 
-      {/* ── Pending review banner ───────────────────────────────────────────────── */}
-      {pendingReview > 0 && (
-        <div
-          className="info-box warning"
-          style={{ cursor: 'pointer', userSelect: 'none' }}
-          onClick={() => { setFilterState('draft'); setShowAllVersions(false) }}
-        >
-          <span>✎</span>
-          <div>
-            <strong>{pendingReview} definition{pendingReview !== 1 ? 's' : ''} pending review</strong>
-            <span style={{ marginLeft: 10, fontSize: 12 }}>
-              Click to filter — each must be reviewed by a catalog admin before becoming available in the customer catalog.
-            </span>
-          </div>
-          <span style={{ marginLeft: 'auto', fontSize: 12, whiteSpace: 'nowrap' }}>
-            View all drafts →
-          </span>
-        </div>
-      )}
-
-      {/* ── Summary tiles ───────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        {([
-          { key: 'all',      label: 'Definition Families', count: totalFamilies,  color: '#6b7280', icon: '⬡' },
-          { key: 'draft',    label: 'Pending Review',       count: pendingReview,  color: '#d97706', icon: '✎' },
-          { key: 'active',   label: 'Active',               count: activeCount,    color: '#16a34a', icon: '●' },
-          { key: 'inactive', label: 'Inactive',             count: inactiveCount,  color: '#6b7280', icon: '◎' },
-          { key: 'archived', label: 'Archived',             count: archivedCount,  color: '#9ca3af', icon: '◎' },
-        ] as const).map(tile => (
-          <div
-            key={tile.key}
-            className="card"
-            onClick={() => { setFilterState(tile.key); setShowAllVersions(false) }}
-            style={{
-              padding: '12px 18px', margin: 0, flex: '1 1 120px', minWidth: 100, cursor: 'pointer',
-              outline: filterState === tile.key ? `2px solid ${tile.color}` : undefined,
-              outlineOffset: -2,
-            }}
+      {/* ── Filter tabs ──────────────────────────────────────────────────────── */}
+      <div className="tab-bar">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            className={`tab-item${filterState === tab.key ? ' active' : ''}`}
+            onClick={() => { setFilterState(tab.key); setShowAllVersions(false) }}
           >
-            <div style={{ fontSize: 26, fontWeight: 700, color: tile.color }}>
-              {tile.count}
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--theme-color-soft-text)', marginTop: 2 }}>
-              {tile.label}
-            </div>
-          </div>
+            {tab.label}
+            <span style={{
+              marginLeft: 6, fontSize: 11, fontWeight: 600,
+              background: filterState === tab.key ? 'rgba(0,102,204,0.1)' : 'var(--theme-color-ghost-selected)',
+              color: filterState === tab.key ? 'var(--primary)' : 'var(--theme-color-soft-text)',
+              borderRadius: 10, padding: '1px 6px', display: 'inline-block',
+            }}>
+              {tab.count}
+            </span>
+          </button>
         ))}
       </div>
 
-      {/* ── Search + filters ────────────────────────────────────────────────────── */}
-      <div className="search-bar" style={{ alignItems: 'center' }}>
+      {/* ── Command bar ──────────────────────────────────────────────────────── */}
+      <div className="search-bar" style={{ alignItems: 'center', marginTop: 12 }}>
         <input
           className="search-input"
-          placeholder="Search name, manufacturer, model, category, or source…"
+          placeholder="Search name, manufacturer, model or category…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <select className="filter-select" value={filterState} onChange={e => setFilterState(e.target.value)}>
-          <option value="all">All States</option>
-          <option value="draft">Draft (Pending Review)</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="published">Published (all)</option>
-          <option value="archived">Archived</option>
-        </select>
-        <button
-          className={`btn btn-sm ${showAllVersions ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ whiteSpace: 'nowrap' }}
-          onClick={() => setShowAllVersions(v => !v)}
-        >
-          {showAllVersions ? '⊟ Collapse to Latest' : '⊞ Show All Versions'}
-        </button>
+        {filterState === 'all' && (
+          <button
+            className={`btn btn-sm ${showAllVersions ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ whiteSpace: 'nowrap' }}
+            onClick={() => setShowAllVersions(v => !v)}
+          >
+            {showAllVersions ? '⊟ Collapse' : '⊞ All Versions'}
+          </button>
+        )}
       </div>
 
-      {/* ── Definitions table ───────────────────────────────────────────────────── */}
+      {/* ── Table ────────────────────────────────────────────────────────────── */}
       <table className="data-table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Category</th>
             <th>Manufacturer / Model</th>
-            <th>Source</th>
             <th>State</th>
             <th>Version</th>
-            <th>Created</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {displayList.length === 0 && (
             <tr>
-              <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--theme-color-soft-text)' }}>
+              <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--theme-color-soft-text)' }}>
                 No definitions found
               </td>
             </tr>
           )}
           {displayList.map(def => {
             const fid = def.baseDefinitionId ?? def.id
-            const isFirstInGroup = showAllVersions && !renderedFamilies.has(fid)
-            if (showAllVersions) renderedFamilies.add(fid)
+            const isFirstInGroup = showAllVersions && filterState === 'all' && !renderedFamilies.has(fid)
+            if (showAllVersions && filterState === 'all') renderedFamilies.add(fid)
             const size    = familySize(def)
-            const pending = familyPendingCount(def)
             const isCurrent = def.state === 'Published' && def.versionState === 'Active'
             const isDraft   = def.state === 'Draft'
 
             return (
               <Fragment key={def.id}>
-                {/* Family group header row — only in "show all" mode */}
+                {/* Family group header — only in All + All Versions mode */}
                 {isFirstInGroup && (
                   <tr style={{ background: 'var(--theme-color-ghost-selected)' }}>
-                    <td colSpan={8} style={{
+                    <td colSpan={6} style={{
                       padding: '6px 14px', fontSize: 11, fontWeight: 600,
                       textTransform: 'uppercase', letterSpacing: '0.5px',
                       color: 'var(--theme-color-soft-text)',
@@ -277,41 +210,31 @@ export default function DefinitionList() {
 
                 <tr
                   className="clickable"
-                  style={showAllVersions
+                  style={showAllVersions && filterState === 'all'
                     ? { background: isCurrent ? 'rgba(22,163,74,0.05)' : isDraft ? 'rgba(217,119,6,0.04)' : undefined }
                     : undefined}
                   onClick={() => navigate(`/internal/definitions/${def.id}`)}
                 >
-                  {/* Name + chips */}
-                  <td className="link-cell" style={{ paddingLeft: showAllVersions ? 28 : undefined }}>
+                  {/* Name + version count chip */}
+                  <td className="link-cell" style={{ paddingLeft: showAllVersions && filterState === 'all' ? 28 : undefined }}>
                     {def.name}
-                    {/* In collapsed 'all' view: show family size + pending drafts chips */}
                     {!showAllVersions && filterState === 'all' && size > 1 && (
                       <span style={{
-                        marginLeft: 8, fontSize: 11, background: 'var(--theme-color-ghost-selected)',
-                        border: '1px solid var(--theme-color-soft-bdr)', borderRadius: 10,
-                        padding: '1px 7px', color: 'var(--theme-color-soft-text)', fontWeight: 600,
+                        marginLeft: 8, fontSize: 11,
+                        background: 'var(--theme-color-ghost-selected)',
+                        border: '1px solid var(--theme-color-soft-bdr)',
+                        borderRadius: 10, padding: '1px 7px',
+                        color: 'var(--theme-color-soft-text)', fontWeight: 600,
                       }}>
                         {size} versions
-                      </span>
-                    )}
-                    {!showAllVersions && filterState === 'all' && pending > 0 && (
-                      <span style={{
-                        marginLeft: 5, fontSize: 11, background: 'rgba(217,119,6,0.12)',
-                        border: '1px solid rgba(217,119,6,0.35)', borderRadius: 10,
-                        padding: '1px 7px', color: '#d97706', fontWeight: 700,
-                      }}>
-                        {pending} pending
                       </span>
                     )}
                   </td>
 
                   <td>{def.category}</td>
                   <td>{def.manufacturer} — {def.model}</td>
-                  <td><SourceChip source={def.source} /></td>
                   <td><StateBadge state={def.state} versionState={def.versionState} /></td>
                   <td>v{def.version}</td>
-                  <td>{def.createdDate}</td>
 
                   <td onClick={e => e.stopPropagation()}>
                     {isDraft ? (
