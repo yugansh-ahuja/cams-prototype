@@ -28,7 +28,7 @@ export default function AddAsset() {
   // Find a matching active definition by name/model/manufacturer similarity
   const findMatch = (f: typeof form) => {
     if (!f.category) return null
-    const activeDefs = definitions.filter(d => d.state === 'Active')
+    const activeDefs = definitions.filter(d => d.state === 'Published' && d.versionState === 'Active')
     const query = [f.manufacturer, f.model, f.name].map(s => s.toLowerCase()).join(' ')
     for (const def of activeDefs) {
       const defStr = [def.manufacturer, def.model, def.name, def.category].map(s => s.toLowerCase()).join(' ')

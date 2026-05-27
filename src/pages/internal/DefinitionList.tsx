@@ -21,7 +21,7 @@ export default function DefinitionList() {
     all: definitions.length,
     draft: definitions.filter(d => d.state === 'Draft').length,
     published: definitions.filter(d => d.state === 'Published').length,
-    active: definitions.filter(d => d.state === 'Active').length,
+    archived: definitions.filter(d => d.state === 'Archived').length,
   }
 
   return (
@@ -43,8 +43,8 @@ export default function DefinitionList() {
         {[
           { label: 'Total', count: counts.all, color: '#6b7280' },
           { label: 'Draft', count: counts.draft, color: '#6b7280' },
-          { label: 'Published', count: counts.published, color: '#1a8fff' },
-          { label: 'Active', count: counts.active, color: '#16a34a' },
+          { label: 'Published', count: counts.published, color: '#16a34a' },
+          { label: 'Archived', count: counts.archived, color: '#9ca3af' },
         ].map(tile => (
           <div key={tile.label} className="card" style={{ padding: '12px 20px', margin: 0, flex: 1, minWidth: 80 }}>
             <div style={{ fontSize: 26, fontWeight: 700, color: tile.color }}>{tile.count}</div>
@@ -65,7 +65,7 @@ export default function DefinitionList() {
           <option value="all">All States</option>
           <option value="draft">Draft</option>
           <option value="published">Published</option>
-          <option value="active">Active</option>
+          <option value="archived">Archived</option>
         </select>
       </div>
 
@@ -122,8 +122,8 @@ export default function DefinitionList() {
 function StateBadge({ state }: { state: DefinitionState }) {
   return (
     <span className={`state-badge ${state.toLowerCase()}`}>
-      {state === 'Active' && '● '}
-      {state === 'Published' && '◉ '}
+      {state === 'Published' && '● '}
+      {state === 'Archived' && '◎ '}
       {state === 'Draft' && '○ '}
       {state}
     </span>

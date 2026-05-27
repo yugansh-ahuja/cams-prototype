@@ -1,96 +1,194 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
-import { type AssetDefinition, type DefinitionState } from '../../data/mockData'
+import { type AssetDefinition } from '../../data/mockData'
 
-type Modal = null | 'publish' | 'activate' | 'publish-activate' | 'already-published' | 'already-active' | 'confirm-publish' | 'confirm-activate' | 'confirm-publish-activate'
+const CATEGORIES = ['Pumps', 'Security', 'Life Safety', 'Electrical', 'HVAC', 'Mechanical', 'Plumbing', 'IT Infrastructure', 'Other']
+
+type Modal = null | 'confirm-publish' | 'confirm-archive' | 'confirm-restore'
 
 export default function DefinitionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { definitions, updateDefinition, addToast } = useApp()
+  const { definitions, assets, updateDefinition, addToast } = useApp()
+
+  // Edit mode (Draft only — HC-6345)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState<Partial<AssetDefinition>>({})
+  const [editSpecs, setEditSpecs] = useState<{ label: string; value: string }[]>([])
+
+  // Modal & publish-validation
   const [modal, setModal] = useState<Modal>(null)
-  const [activeTab, setActiveTab] = useState<'details' | 'specs' | 'lifecycle'>('details')
+  const [publishErrors, setPublishErrors] = useState<string[]>([])
 
   const def = definitions.find(d => d.id === id)
 
   if (!def) {
     return (
-      <div className="page-content">
-        <div className="info-box error"><span>✕</span><span>Definition not found.</span></div>
-        <button className="btn btn-secondary" onClick={() => navigate('/internal/definitions')}>← Back</button>
+      <div style={{ padding: 40, textAlign: 'center', color: 'var(--theme-color-soft-text)' }}>
+        Definition not found.{' '}
+        <span className="link-cell" style={{ cursor: 'pointer' }} onClick={() => navigate('/internal/definitions')}>
+          Back to Definitions
+        </span>
       </div>
     )
   }
 
-  const handlePublishAndActivate = () => {
-    if (def.state === 'Active') {
-      setModal('already-active')
-    } else if (def.state === 'Published') {
-      setModal('already-published')
-    } else {
-      setModal('confirm-publish-activate')
-    }
+  const linkedAssetCount = assets.filter(a => a.linkedDefinitionId === def.id).length
+
+  // ── Edit mode (HC-6345) ───────────────────────────────────────────────────────
+
+  const startEdit = () => {
+    setEditForm({
+      name: def.name,
+      category: def.category,
+      manufacturer: def.manufacturer,
+      model: def.model,
+      description: def.description,
+      expectedLifespan: def.expectedLifespan,
+      msrp: def.msrp,
+    })
+    setEditSpecs(def.specifications.map(s => ({ ...s })))
+    setPublishErrors([])
+    setIsEditing(true)
   }
 
-  const handlePublish = () => {
-    if (def.state === 'Published' || def.state === 'Active') {
-      setModal('already-published')
-    } else {
-      setModal('confirm-publish')
-    }
+  const cancelEdit = () => {
+    setIsEditing(false)
+    setEditForm({})
+    setEditSpecs([])
   }
 
-  const handleActivate = () => {
-    if (def.state === 'Active') {
-      setModal('already-active')
-    } else if (def.state === 'Draft') {
-      // Can't activate a draft directly
-      setModal('publish')
-    } else {
-      setModal('confirm-activate')
+  const saveEdit = () => {
+    const updated: AssetDefinition = {
+      ...def,
+      name: String(editForm.name ?? def.name).trim() || def.name,
+      category: String(editForm.category ?? def.category) || def.category,
+      manufacturer: String(editForm.manufacturer ?? def.manufacturer).trim() || def.manufacturer,
+      model: String(editForm.model ?? def.model).trim() || def.model,
+      description: String(editForm.description ?? def.description).trim() || def.description,
+      expectedLifespan: Number(editForm.expectedLifespan) || def.expectedLifespan,
+      msrp: Number(editForm.msrp) || def.msrp,
+      specifications: editSpecs.filter(s => s.label.trim() && s.value.trim()),
     }
+    updateDefinition(updated)
+    addToast({ type: 'success', title: 'Draft Saved', message: `${updated.name} has been updated.` })
+    setIsEditing(false)
+    setEditForm({})
+    setEditSpecs([])
+  }
+
+  // ── Lifecycle actions ─────────────────────────────────────────────────────────
+
+  // HC-6844: validate required fields before opening publish modal
+  const tryPublish = () => {
+    const errors: string[] = []
+    if (!def.manufacturer.trim()) errors.push('Manufacturer is required')
+    if (!def.model.trim()) errors.push('Model is required')
+    if (!def.category) errors.push('Category is required')
+    if (!def.description.trim()) errors.push('Description is required')
+    if (errors.length > 0) {
+      setPublishErrors(errors)
+      return
+    }
+    setPublishErrors([])
+    setModal('confirm-publish')
   }
 
   const doPublish = () => {
     const updated: AssetDefinition = {
       ...def,
       state: 'Published',
+      versionState: 'Active',
       publishedDate: new Date().toISOString().split('T')[0],
     }
     updateDefinition(updated)
     setModal(null)
-    addToast({ type: 'success', title: 'Definition Published', message: `${def.name} is now published to the catalog.` })
+    addToast({ type: 'success', title: 'Definition Published', message: `${def.name} is now live and active in the catalog.` })
   }
 
-  const doActivate = () => {
+  const doArchive = () => {
     const updated: AssetDefinition = {
       ...def,
-      state: 'Active',
-      activatedDate: new Date().toISOString().split('T')[0],
+      state: 'Archived',
+      versionState: undefined,
+      archivedDate: new Date().toISOString().split('T')[0],
     }
     updateDefinition(updated)
     setModal(null)
-    addToast({ type: 'success', title: 'Definition Activated', message: `${def.name} is now active and visible to customers.` })
+    addToast({ type: 'info', title: 'Definition Archived', message: `${def.name} has been archived. Existing asset links are preserved.` })
   }
 
-  const doPublishAndActivate = () => {
-    const today = new Date().toISOString().split('T')[0]
+  // HC-6845: Restore archived definition back to Published + Active
+  const doRestore = () => {
     const updated: AssetDefinition = {
       ...def,
-      state: 'Active',
-      publishedDate: today,
-      activatedDate: today,
+      state: 'Published',
+      versionState: 'Active',
+      publishedDate: new Date().toISOString().split('T')[0],
+      archivedDate: undefined,
     }
     updateDefinition(updated)
     setModal(null)
-    addToast({ type: 'success', title: 'Definition Published & Activated', message: `${def.name} is now live.` })
+    addToast({ type: 'success', title: 'Definition Restored', message: `${def.name} has been restored and is now active in the catalog.` })
   }
 
-  const stepState = (step: 1 | 2 | 3) => {
-    if (def.state === 'Draft') return step === 1 ? 'current' : 'pending'
-    if (def.state === 'Published') return step === 1 ? 'done' : step === 2 ? 'current' : 'pending'
-    return 'done'
+  // ── Render helpers ────────────────────────────────────────────────────────────
+
+  const editField = (
+    key: keyof typeof editForm,
+    label: string,
+    type: string = 'text',
+    opts?: { as?: 'textarea' | 'select' }
+  ) => (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      {opts?.as === 'textarea' ? (
+        <textarea
+          className="form-textarea"
+          value={String(editForm[key] ?? '')}
+          onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+        />
+      ) : opts?.as === 'select' ? (
+        <select
+          className="form-select"
+          value={String(editForm[key] ?? '')}
+          onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+        >
+          <option value="">Select category...</option>
+          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      ) : (
+        <input
+          className="form-input"
+          type={type}
+          value={String(editForm[key] ?? '')}
+          onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+        />
+      )}
+    </div>
+  )
+
+  // State badge — shows combined state + versionState for Published
+  const stateBadge = () => {
+    if (def.state === 'Published' && def.versionState === 'Active') {
+      return (
+        <>
+          <span className="state-badge published">● Published</span>
+          <span className="state-badge active" style={{ marginLeft: 6 }}>◉ Active</span>
+        </>
+      )
+    }
+    if (def.state === 'Published' && def.versionState === 'Inactive') {
+      return (
+        <>
+          <span className="state-badge published">● Published</span>
+          <span className="state-badge inactive" style={{ marginLeft: 6 }}>○ Inactive</span>
+        </>
+      )
+    }
+    if (def.state === 'Archived') return <span className="state-badge archived">◎ Archived</span>
+    return <span className="state-badge draft">○ Draft</span>
   }
 
   return (
@@ -105,314 +203,400 @@ export default function DefinitionDetail() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <h1 className="page-title" style={{ margin: 0 }}>{def.name}</h1>
-            <StateBadge state={def.state} />
-            <span style={{ fontSize: 12, color: 'var(--theme-color-soft-text)' }}>v{def.version}</span>
-          </div>
-          <p className="page-subtitle">{def.manufacturer} · {def.model} · {def.category}</p>
+          <h1 className="page-title">{def.name}</h1>
+          <p className="page-subtitle">
+            {def.manufacturer} — {def.model} · v{def.version} · {def.category}
+          </p>
         </div>
-        <div className="page-actions">
-          {def.state === 'Draft' && (
+        <div className="page-actions" style={{ alignItems: 'center' }}>
+          {stateBadge()}
+
+          {/* Draft actions */}
+          {def.state === 'Draft' && !isEditing && (
             <>
-              <button className="btn btn-secondary" onClick={handlePublish}>Publish</button>
-              <button className="btn btn-primary" onClick={handlePublishAndActivate}>Publish & Activate</button>
+              <button className="btn btn-secondary" onClick={startEdit} style={{ marginLeft: 10 }}>
+                Edit Draft
+              </button>
+              <button className="btn btn-primary" onClick={tryPublish} style={{ marginLeft: 6 }}>
+                Publish
+              </button>
             </>
           )}
+          {def.state === 'Draft' && isEditing && (
+            <>
+              <button className="btn btn-secondary" onClick={cancelEdit} style={{ marginLeft: 10 }}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={saveEdit} style={{ marginLeft: 6 }}>
+                Save Changes
+              </button>
+            </>
+          )}
+
+          {/* Published actions */}
           {def.state === 'Published' && (
-            <>
-              <button className="btn btn-secondary" onClick={() => setModal('already-published')} title="Definition is already published">Publish</button>
-              <button className="btn btn-primary" onClick={handleActivate}>Activate</button>
-              <button className="btn btn-secondary" onClick={handlePublishAndActivate}>Publish & Activate</button>
-            </>
+            <button className="btn btn-secondary" onClick={() => setModal('confirm-archive')} style={{ marginLeft: 10 }}>
+              Archive
+            </button>
           )}
-          {def.state === 'Active' && (
-            <button className="btn btn-secondary" onClick={() => addToast({ type: 'info', title: 'Already Active', message: 'This definition is already active.' })}>
-              ✓ Active
+
+          {/* Archived actions — HC-6845 */}
+          {def.state === 'Archived' && (
+            <button className="btn btn-primary" onClick={() => setModal('confirm-restore')} style={{ marginLeft: 10 }}>
+              Restore to Catalog
             </button>
           )}
         </div>
       </div>
 
-      {/* Lifecycle stepper */}
-      <div className="lifecycle-stepper">
-        <div className={`lifecycle-step ${stepState(1)}`}>
-          <div className="lifecycle-step-circle">{def.state !== 'Draft' ? '✓' : '1'}</div>
-          <div className="lifecycle-step-label">Draft</div>
-          {def.createdDate && <div style={{ fontSize: 10, color: 'var(--theme-color-soft-text)' }}>{def.createdDate}</div>}
-        </div>
-        <div className={`lifecycle-connector ${def.state !== 'Draft' ? 'done' : ''}`} />
-        <div className={`lifecycle-step ${stepState(2)}`}>
-          <div className="lifecycle-step-circle">{def.state === 'Active' ? '✓' : '2'}</div>
-          <div className="lifecycle-step-label">Published</div>
-          {def.publishedDate && <div style={{ fontSize: 10, color: 'var(--theme-color-soft-text)' }}>{def.publishedDate}</div>}
-        </div>
-        <div className={`lifecycle-connector ${def.state === 'Active' ? 'done' : ''}`} />
-        <div className={`lifecycle-step ${stepState(3)}`}>
-          <div className="lifecycle-step-circle">{def.state === 'Active' ? '✓' : '3'}</div>
-          <div className="lifecycle-step-label">Active</div>
-          {def.activatedDate && <div style={{ fontSize: 10, color: 'var(--theme-color-soft-text)' }}>{def.activatedDate}</div>}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="tab-bar">
-        {(['details', 'specs', 'lifecycle'] as const).map(tab => (
-          <div
-            key={tab}
-            className={`tab-item ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === 'details' ? 'Details' : tab === 'specs' ? 'Specifications' : 'Lifecycle'}
-          </div>
-        ))}
-      </div>
-
-      {/* Details tab */}
-      {activeTab === 'details' && (
-        <div className="card">
-          <h3 className="card-title">Definition Information</h3>
-          <div className="detail-grid">
-            <div className="detail-row"><span className="detail-label">Name</span><span className="detail-value">{def.name}</span></div>
-            <div className="detail-row"><span className="detail-label">Category</span><span className="detail-value">{def.category}</span></div>
-            <div className="detail-row"><span className="detail-label">Manufacturer</span><span className="detail-value">{def.manufacturer}</span></div>
-            <div className="detail-row"><span className="detail-label">Model</span><span className="detail-value">{def.model}</span></div>
-            <div className="detail-row"><span className="detail-label">Expected Lifespan</span><span className="detail-value">{def.expectedLifespan} years</span></div>
-            <div className="detail-row"><span className="detail-label">MSRP</span><span className="detail-value">${def.msrp.toLocaleString()}</span></div>
-            <div className="detail-row" style={{ gridColumn: '1 / -1' }}>
-              <span className="detail-label">Description</span>
-              <span className="detail-value">{def.description}</span>
-            </div>
+      {/* Publish validation errors (HC-6844) */}
+      {publishErrors.length > 0 && (
+        <div className="info-box warning">
+          <span>⚠</span>
+          <div>
+            <strong>Cannot publish — the following fields are required:</strong>
+            <ul style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 13 }}>
+              {publishErrors.map(e => <li key={e}>{e}</li>)}
+            </ul>
+            <div style={{ fontSize: 12, marginTop: 4 }}>Edit this draft to fill in the missing information, then try publishing again.</div>
           </div>
         </div>
       )}
 
-      {/* Specs tab */}
-      {activeTab === 'specs' && (
-        <div className="card">
-          <h3 className="card-title">Technical Specifications</h3>
-          {def.specifications.length === 0 ? (
-            <div style={{ color: 'var(--theme-color-soft-text)', fontSize: 13 }}>No specifications added yet.</div>
-          ) : (
-            <table className="spec-table">
-              <tbody>
-                {def.specifications.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.label}</td>
-                    <td>{s.value}</td>
+      {/* State-contextual info-boxes */}
+      {def.state === 'Draft' && !isEditing && (
+        <div className="info-box info">
+          <span>✎</span>
+          <span>This definition is a <strong>Draft</strong>. Click <strong>Edit Draft</strong> to update its information, or <strong>Publish</strong> to make it available in the customer catalog.</span>
+        </div>
+      )}
+      {def.state === 'Draft' && isEditing && (
+        <div className="info-box info">
+          <span>✎</span>
+          <span>You are editing this draft. Make your changes below, then click <strong>Save Changes</strong> to apply them.</span>
+        </div>
+      )}
+      {def.state === 'Published' && def.versionState === 'Active' && (
+        <div className="info-box" style={{ background: 'var(--success-bg)', borderColor: 'var(--success-bdr)', color: 'var(--success)' }}>
+          <span>✓</span>
+          <span>This definition is <strong>Published and Active</strong>. It is visible in the customer catalog and customers can commission assets from it. This definition is read-only.</span>
+        </div>
+      )}
+      {def.state === 'Archived' && (
+        <div className="info-box warning">
+          <span>◎</span>
+          <span>This definition is <strong>Archived</strong>. It is no longer shown in the customer catalog. Existing asset links are preserved. Click <strong>Restore to Catalog</strong> to make it active again.</span>
+        </div>
+      )}
+
+      {/* ── Edit mode form (Draft only — HC-6345) ──────────────────────────────── */}
+      {isEditing ? (
+        <>
+          <div className="card">
+            <h3 className="card-title">Edit Basic Information</h3>
+            <div className="detail-grid">
+              <div>{editField('name', 'Definition Name')}</div>
+              <div>{editField('category', 'Category', 'text', { as: 'select' })}</div>
+              <div>{editField('manufacturer', 'Manufacturer')}</div>
+              <div>{editField('model', 'Model')}</div>
+              <div>{editField('expectedLifespan', 'Expected Lifespan (years)', 'number')}</div>
+              <div>{editField('msrp', 'MSRP (USD)', 'number')}</div>
+              <div style={{ gridColumn: '1 / -1' }}>{editField('description', 'Description', 'text', { as: 'textarea' })}</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="card-title">Technical Specifications</h3>
+            <p style={{ fontSize: 12, color: 'var(--theme-color-soft-text)', marginBottom: 16 }}>
+              Optional — add key specifications for this asset type.
+            </p>
+            {editSpecs.map((spec, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center' }}>
+                <input
+                  className="form-input"
+                  placeholder="Label (e.g. Flow Rate)"
+                  value={spec.label}
+                  onChange={e => setEditSpecs(s => s.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  className="form-input"
+                  placeholder="Value (e.g. 10 m³/h)"
+                  value={spec.value}
+                  onChange={e => setEditSpecs(s => s.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                  style={{ flex: 1 }}
+                />
+                {editSpecs.length > 1 && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditSpecs(s => s.filter((_, j) => j !== i))}>✕</button>
+                )}
+              </div>
+            ))}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditSpecs(s => [...s, { label: '', value: '' }])}>
+              + Add Specification
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>
+            <button className="btn btn-primary" onClick={saveEdit}>Save Changes</button>
+          </div>
+        </>
+      ) : (
+        /* ── Read-only view ────────────────────────────────────────────────────── */
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            {/* Basic info */}
+            <div className="card">
+              <h3 className="card-title">Basic Information</h3>
+              <div className="detail-grid">
+                <div>
+                  <div className="detail-label">Definition Name</div>
+                  <div className="detail-value">{def.name}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Category</div>
+                  <div className="detail-value">{def.category}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Manufacturer</div>
+                  <div className="detail-value">{def.manufacturer || <span style={{ color: 'var(--theme-color-soft-text)' }}>—</span>}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Model</div>
+                  <div className="detail-value">{def.model || <span style={{ color: 'var(--theme-color-soft-text)' }}>—</span>}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Asset Class</div>
+                  <div className="detail-value">{def.assetClass}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Version</div>
+                  <div className="detail-value">v{def.version}</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="detail-label">Description</div>
+                  <div className="detail-value">
+                    {def.description || <span style={{ color: 'var(--theme-color-soft-text)', fontStyle: 'italic' }}>No description provided.</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Lifecycle & commercial */}
+            <div className="card">
+              <h3 className="card-title">Lifecycle &amp; Commercial</h3>
+              <div className="detail-grid">
+                <div>
+                  <div className="detail-label">Expected Lifespan</div>
+                  <div className="detail-value">{def.expectedLifespan} years</div>
+                </div>
+                <div>
+                  <div className="detail-label">MSRP</div>
+                  <div className="detail-value">${def.msrp?.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Created</div>
+                  <div className="detail-value">{def.createdDate}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Published</div>
+                  <div className="detail-value">{def.publishedDate ?? '—'}</div>
+                </div>
+                {def.archivedDate && (
+                  <div>
+                    <div className="detail-label">Archived</div>
+                    <div className="detail-value">{def.archivedDate}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="detail-label">Commissioned Assets</div>
+                  <div className="detail-value">{linkedAssetCount}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Technical specifications */}
+          {def.specifications && def.specifications.length > 0 && (
+            <div className="card">
+              <h3 className="card-title">Technical Specifications</h3>
+              <table className="data-table" style={{ marginTop: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Specification</th>
+                    <th>Value</th>
                   </tr>
-                ))}
+                </thead>
+                <tbody>
+                  {def.specifications.map(s => (
+                    <tr key={s.label}>
+                      <td>{s.label}</td>
+                      <td>{s.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Commissioned assets panel */}
+          {linkedAssetCount > 0 && (
+            <div className="card">
+              <h3 className="card-title">Commissioned Assets</h3>
+              <table className="data-table" style={{ marginTop: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Asset Name</th>
+                    <th>Serial Number</th>
+                    <th>Location</th>
+                    <th>Install Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assets
+                    .filter(a => a.linkedDefinitionId === def.id)
+                    .map(a => (
+                      <tr key={a.id}>
+                        <td>{a.name}</td>
+                        <td style={{ fontFamily: 'monospace' }}>{a.serialNumber}</td>
+                        <td>{a.location}</td>
+                        <td>{a.installDate}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Lifecycle history */}
+          <div className="card">
+            <h3 className="card-title">Lifecycle History</h3>
+            <table className="data-table" style={{ marginTop: 0 }}>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Date</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Definition Created</td>
+                  <td>{def.createdDate}</td>
+                  <td><span className="state-badge draft">○ Draft</span></td>
+                </tr>
+                {def.publishedDate && (
+                  <tr>
+                    <td>Published to Catalog</td>
+                    <td>{def.publishedDate}</td>
+                    <td><span className="state-badge published">● Published</span></td>
+                  </tr>
+                )}
+                {def.archivedDate && (
+                  <tr>
+                    <td>Archived</td>
+                    <td>{def.archivedDate}</td>
+                    <td><span className="state-badge archived">◎ Archived</span></td>
+                  </tr>
+                )}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        </>
       )}
 
-      {/* Lifecycle tab */}
-      {activeTab === 'lifecycle' && (
-        <div className="card">
-          <h3 className="card-title">Lifecycle History</h3>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Event</th>
-                <th>Date</th>
-                <th>State</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Definition Created</td>
-                <td>{def.createdDate}</td>
-                <td><span className="state-badge draft">Draft</span></td>
-              </tr>
-              {def.publishedDate && (
-                <tr>
-                  <td>Published to Catalog</td>
-                  <td>{def.publishedDate}</td>
-                  <td><span className="state-badge published">Published</span></td>
-                </tr>
-              )}
-              {def.activatedDate && (
-                <tr>
-                  <td>Activated</td>
-                  <td>{def.activatedDate}</td>
-                  <td><span className="state-badge active">Active</span></td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── MODALS ── */}
-
-      {/* Confirm Publish & Activate (from Draft) */}
-      {modal === 'confirm-publish-activate' && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <div className="modal-header">
-            <h2 className="modal-title">Publish & Activate Definition</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
-          </div>
-          <div className="modal-body">
-            <div className="info-box info">
-              <span>ℹ</span>
-              <div>
-                <strong>This action will publish and activate <em>{def.name}</em> in one step.</strong>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>The definition will be immediately visible to Customer Admins and available to link to assets.</p>
-              </div>
-            </div>
-            <div className="detail-grid" style={{ marginTop: 12 }}>
-              <div className="detail-row"><span className="detail-label">Name</span><span className="detail-value">{def.name}</span></div>
-              <div className="detail-row"><span className="detail-label">Category</span><span className="detail-value">{def.category}</span></div>
-              <div className="detail-row"><span className="detail-label">Manufacturer</span><span className="detail-value">{def.manufacturer}</span></div>
-              <div className="detail-row"><span className="detail-label">Version</span><span className="detail-value">v{def.version}</span></div>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={doPublishAndActivate}>Confirm: Publish & Activate</button>
-          </div>
-        </ModalOverlay>
-      )}
-
-      {/* Confirm Publish only */}
+      {/* ── Confirm Publish modal ─────────────────────────────────────────────── */}
       {modal === 'confirm-publish' && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <div className="modal-header">
-            <h2 className="modal-title">Publish Definition</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
-          </div>
-          <div className="modal-body">
-            <div className="info-box info">
-              <span>ℹ</span>
-              <div>
-                <strong>This will publish <em>{def.name}</em> to the catalog.</strong>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>The definition will be in Published state. A separate Activation step is required before customers can link assets to it.</p>
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModal(null) }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Publish Definition</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="info-box info">
+                <span>ℹ</span>
+                <div>
+                  <strong>Publish "{def.name}" to the catalog?</strong>
+                  <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                    This definition will become <strong>Active</strong> in the customer catalog immediately. Customers will be able to browse it and commission assets from it.
+                  </p>
+                </div>
+              </div>
+              <div className="detail-grid" style={{ marginTop: 12 }}>
+                <div><div className="detail-label">Name</div><div className="detail-value">{def.name}</div></div>
+                <div><div className="detail-label">Category</div><div className="detail-value">{def.category}</div></div>
+                <div><div className="detail-label">Manufacturer</div><div className="detail-value">{def.manufacturer}</div></div>
+                <div><div className="detail-label">Version</div><div className="detail-value">v{def.version}</div></div>
               </div>
             </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={doPublish}>Publish</button>
+            </div>
           </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={doPublish}>Confirm: Publish</button>
-          </div>
-        </ModalOverlay>
+        </div>
       )}
 
-      {/* Confirm Activate only (from Published) */}
-      {modal === 'confirm-activate' && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <div className="modal-header">
-            <h2 className="modal-title">Activate Definition</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
-          </div>
-          <div className="modal-body">
-            <div className="info-box success">
-              <span>✓</span>
-              <div>
-                <strong>Ready to activate <em>{def.name}</em>.</strong>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>This definition is already published. Activating will make it immediately available to Customer Admins.</p>
+      {/* ── Confirm Archive modal ─────────────────────────────────────────────── */}
+      {modal === 'confirm-archive' && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModal(null) }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Archive Definition</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="info-box warning">
+                <span>⚠</span>
+                <div>
+                  <strong>Archive "{def.name}"?</strong>
+                  <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                    This definition will be removed from the customer catalog. <strong>Existing commissioned asset links are preserved</strong> and will continue to reference this definition.
+                    You can <strong>restore</strong> this definition later to make it active again.
+                  </p>
+                </div>
               </div>
+              {linkedAssetCount > 0 && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--theme-color-ghost-selected)', borderRadius: 6, fontSize: 13 }}>
+                  <strong>{linkedAssetCount}</strong> asset{linkedAssetCount !== 1 ? 's are' : ' is'} currently linked to this definition and will retain their link after archiving.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={doArchive}>Archive</button>
             </div>
           </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={doActivate}>Confirm: Activate</button>
-          </div>
-        </ModalOverlay>
+        </div>
       )}
 
-      {/* Validation: Already Published (tried Publish or Publish & Activate on an already-published definition) */}
-      {modal === 'already-published' && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <div className="modal-header">
-            <h2 className="modal-title">Cannot Publish</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
-          </div>
-          <div className="modal-body">
-            <div className="info-box warning">
-              <span>⚠</span>
-              <div>
-                <strong>This asset definition is already published. Activation required.</strong>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-                  The definition <em>{def.name}</em> is in <strong>Published</strong> state and does not need to be published again.
-                  Use the <strong>Activate</strong> button to make it live.
-                </p>
+      {/* ── Confirm Restore modal (HC-6845) ──────────────────────────────────── */}
+      {modal === 'confirm-restore' && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModal(null) }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Restore Definition</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="info-box info">
+                <span>ℹ</span>
+                <div>
+                  <strong>Restore "{def.name}" to the catalog?</strong>
+                  <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                    This definition will be set back to <strong>Published &amp; Active</strong> and will reappear in the customer catalog immediately. Customers will be able to commission new assets from it.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Close</button>
-            <button className="btn btn-primary" onClick={() => { setModal(null); handleActivate() }}>Go to Activate</button>
-          </div>
-        </ModalOverlay>
-      )}
-
-      {/* Validation: Already Active */}
-      {modal === 'already-active' && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <div className="modal-header">
-            <h2 className="modal-title">Already Active</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
-          </div>
-          <div className="modal-body">
-            <div className="info-box success">
-              <span>✓</span>
-              <div>
-                <strong>This asset definition is already published and active.</strong>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>No further action is required. The definition is live in the catalog.</p>
-              </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={doRestore}>Restore to Catalog</button>
             </div>
           </div>
-          <div className="modal-footer">
-            <button className="btn btn-primary" onClick={() => setModal(null)}>OK</button>
-          </div>
-        </ModalOverlay>
-      )}
-
-      {/* Info: can't activate a Draft */}
-      {modal === 'publish' && (
-        <ModalOverlay onClose={() => setModal(null)}>
-          <div className="modal-header">
-            <h2 className="modal-title">Publish Required First</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => setModal(null)}>✕</button>
-          </div>
-          <div className="modal-body">
-            <div className="info-box warning">
-              <span>⚠</span>
-              <div>
-                <strong>This definition must be published before it can be activated.</strong>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>Use <strong>Publish</strong> or <strong>Publish & Activate</strong> to proceed.</p>
-              </div>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={() => { setModal('confirm-publish-activate') }}>Publish & Activate</button>
-          </div>
-        </ModalOverlay>
+        </div>
       )}
     </>
-  )
-}
-
-function StateBadge({ state }: { state: DefinitionState }) {
-  return (
-    <span className={`state-badge ${state.toLowerCase()}`}>
-      {state === 'Active' && '● '}
-      {state === 'Published' && '◉ '}
-      {state === 'Draft' && '○ '}
-      {state}
-    </span>
-  )
-}
-
-function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box">
-        {children}
-      </div>
-    </div>
   )
 }

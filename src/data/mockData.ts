@@ -1,8 +1,10 @@
-export type DefinitionState = 'Draft' | 'Published' | 'Active';
+export type DefinitionState = 'Draft' | 'Published' | 'Archived';
+export type VersionState = 'Active' | 'Inactive';
 
 export interface AssetDefinition {
   id: string;
   name: string;
+  assetClass: string;
   category: string;
   manufacturer: string;
   model: string;
@@ -10,10 +12,11 @@ export interface AssetDefinition {
   expectedLifespan: number;
   msrp: number;
   state: DefinitionState;
+  versionState?: VersionState;
   version: number;
   createdDate: string;
   publishedDate?: string;
-  activatedDate?: string;
+  archivedDate?: string;
   specifications: { label: string; value: string }[];
 }
 
@@ -45,17 +48,18 @@ export const definitions: AssetDefinition[] = [
   {
     id: 'def-001',
     name: 'Booster Pump Package',
+    assetClass: 'Equipment',
     category: 'Pumps',
     manufacturer: 'Grundfos',
     model: 'CM-10',
     description: 'High-efficiency centrifugal booster pump for pressure boosting in water supply systems.',
     expectedLifespan: 15,
     msrp: 4200,
-    state: 'Active',
+    state: 'Published',
+    versionState: 'Active',
     version: 3,
     createdDate: '2024-11-01',
     publishedDate: '2024-11-15',
-    activatedDate: '2024-11-20',
     specifications: [
       { label: 'Flow Rate', value: '10 m³/h' },
       { label: 'Head', value: '45 m' },
@@ -68,6 +72,7 @@ export const definitions: AssetDefinition[] = [
   {
     id: 'def-002',
     name: 'Network PTZ Camera',
+    assetClass: 'Equipment',
     category: 'Security',
     manufacturer: 'Axis Communications',
     model: 'Q6115-E',
@@ -75,6 +80,7 @@ export const definitions: AssetDefinition[] = [
     expectedLifespan: 8,
     msrp: 3800,
     state: 'Published',
+    versionState: 'Active',
     version: 2,
     createdDate: '2025-01-10',
     publishedDate: '2025-02-01',
@@ -88,17 +94,18 @@ export const definitions: AssetDefinition[] = [
   {
     id: 'def-003',
     name: 'Fire Alarm Control Panel',
+    assetClass: 'Equipment',
     category: 'Life Safety',
     manufacturer: 'Notifier',
     model: 'NFS2-3030',
     description: 'Addressable fire alarm control panel supporting up to 3,030 points.',
     expectedLifespan: 20,
     msrp: 12000,
-    state: 'Active',
+    state: 'Published',
+    versionState: 'Active',
     version: 1,
     createdDate: '2024-08-15',
     publishedDate: '2024-09-01',
-    activatedDate: '2024-09-10',
     specifications: [
       { label: 'Points', value: '3,030 addressable' },
       { label: 'Loops', value: '30 SLC loops' },
@@ -109,6 +116,7 @@ export const definitions: AssetDefinition[] = [
   {
     id: 'def-004',
     name: 'Power Monitoring Unit',
+    assetClass: 'Equipment',
     category: 'Electrical',
     manufacturer: 'Schneider Electric',
     model: 'PowerLogic PM8000',
@@ -127,6 +135,7 @@ export const definitions: AssetDefinition[] = [
   {
     id: 'def-005',
     name: 'Rooftop HVAC Unit',
+    assetClass: 'Equipment',
     category: 'HVAC',
     manufacturer: 'Carrier',
     model: 'WeatherExpert 48WE',
@@ -146,17 +155,18 @@ export const definitions: AssetDefinition[] = [
   {
     id: 'def-006',
     name: 'Generator 500kVA',
+    assetClass: 'Equipment',
     category: 'Electrical',
     manufacturer: 'Cummins',
     model: 'C500D5',
     description: 'Diesel prime power generator for continuous duty applications with UL certified alternator.',
     expectedLifespan: 25,
     msrp: 85000,
-    state: 'Active',
+    state: 'Archived',
     version: 2,
     createdDate: '2024-06-01',
     publishedDate: '2024-06-20',
-    activatedDate: '2024-07-01',
+    archivedDate: '2025-01-15',
     specifications: [
       { label: 'Prime Power', value: '500 kVA' },
       { label: 'Standby Power', value: '550 kVA' },

@@ -608,14 +608,25 @@ a:hover { text-decoration: underline; }
   border: 1px solid #e5e7eb;
 }
 .state-badge.published {
-  background: var(--info-bg);
-  color: var(--info);
-  border: 1px solid var(--info-bdr);
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success-bdr);
 }
+.state-badge.archived {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+}
+/* Version sub-state badges (Active / Inactive within Published) */
 .state-badge.active {
   background: var(--success-bg);
   color: var(--success);
   border: 1px solid var(--success-bdr);
+}
+.state-badge.inactive {
+  background: var(--theme-color-ghost-selected, #f3f4f6);
+  color: var(--theme-color-soft-text, #6b7280);
+  border: 1px solid var(--theme-color-soft-bdr, #e5e7eb);
 }
 /* Work order status */
 .state-badge.open {

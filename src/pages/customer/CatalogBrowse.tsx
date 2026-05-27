@@ -22,10 +22,10 @@ export default function CatalogBrowse() {
   })
   const [commissionErrors, setCommissionErrors] = useState<Record<string, string>>({})
 
-  // Only show Active definitions in the public catalog
-  const activeDefs = definitions.filter(d => d.state === 'Active')
+  // Only show Published + Active definitions in the customer catalog (HC-6118)
+  const publishedDefs = definitions.filter(d => d.state === 'Published' && d.versionState === 'Active')
 
-  const filtered = activeDefs.filter(d => {
+  const filtered = publishedDefs.filter(d => {
     const matchSearch =
       d.name.toLowerCase().includes(search.toLowerCase()) ||
       d.manufacturer.toLowerCase().includes(search.toLowerCase()) ||
@@ -92,15 +92,15 @@ export default function CatalogBrowse() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Browse Catalog</h1>
-          <p className="page-subtitle">Explore active asset definitions. Commission a new asset directly from a catalog entry.</p>
+          <p className="page-subtitle">Explore published asset definitions. Commission a new asset directly from a catalog entry.</p>
         </div>
       </div>
 
       {/* Stats */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
         <div className="card" style={{ padding: '12px 20px', margin: 0 }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: '#16a34a' }}>{activeDefs.length}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--theme-color-soft-text)' }}>Active Definitions</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#16a34a' }}>{publishedDefs.length}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--theme-color-soft-text)' }}>Published Definitions</div>
         </div>
         <div className="card" style={{ padding: '12px 20px', margin: 0 }}>
           <div style={{ fontSize: 26, fontWeight: 700, color: '#6b7280' }}>{filtered.length}</div>
@@ -157,7 +157,7 @@ export default function CatalogBrowse() {
         </div>
       )}
 
-      {/* Definition Detail Drawer / Modal (HC-6843 browse detail) */}
+      {/* Definition Detail Modal */}
       {selectedDef && (
         <div className="modal-overlay" onClick={() => setSelectedDef(null)}>
           <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
@@ -198,7 +198,7 @@ export default function CatalogBrowse() {
         </div>
       )}
 
-      {/* Commission Modal — HC-6843 Flow 1 */}
+      {/* Commission Modal */}
       {showCommissionModal && commissionDef && (
         <div className="modal-overlay" onClick={() => setShowCommissionModal(false)}>
           <div className="modal-box" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>

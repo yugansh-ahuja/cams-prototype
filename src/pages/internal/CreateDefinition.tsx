@@ -48,6 +48,7 @@ export default function CreateDefinition() {
     const newDef: AssetDefinition = {
       id: `def-${Date.now()}`,
       name: form.name,
+      assetClass: 'Equipment',
       category: form.category,
       manufacturer: form.manufacturer,
       model: form.model,
@@ -112,7 +113,7 @@ export default function CreateDefinition() {
 
       <div className="info-box info">
         <span>ℹ</span>
-        <span>This definition will be saved as <strong>Draft</strong>. Use <strong>Publish & Activate</strong> from the definition detail to make it available to customers.</span>
+        <span>This definition will be saved as <strong>Draft</strong>. Use <strong>Publish</strong> from the definition detail to make it available to customers.</span>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -126,6 +127,13 @@ export default function CreateDefinition() {
             <div>{field('expectedLifespan', 'Expected Lifespan (years)', 'number')}</div>
             <div>{field('msrp', 'MSRP (USD)', 'number')}</div>
             <div style={{ gridColumn: '1 / -1' }}>{field('description', 'Description', 'text', { as: 'textarea' })}</div>
+          </div>
+          <div className="detail-grid" style={{ marginTop: 4 }}>
+            <div className="form-group">
+              <label className="form-label">Asset Class</label>
+              <input className="form-input" value="Equipment" disabled style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+              <div style={{ fontSize: 11, color: 'var(--theme-color-soft-text)', marginTop: 4 }}>V1 supports Equipment class only</div>
+            </div>
           </div>
         </div>
 

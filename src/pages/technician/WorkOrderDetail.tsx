@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 
 export default function WorkOrderDetail() {
   const { id } = useParams<{ id: string }>()
-  const { workOrders, assets, definitions, addToast } = useApp()
+  const { workOrders, assets, definitions, addToast, updateAsset } = useApp()
   const navigate = useNavigate()
+  const [showAcceptModal, setShowAcceptModal] = useState(false)
 
   const wo = workOrders.find(w => w.id === id)
 
@@ -33,6 +35,19 @@ export default function WorkOrderDetail() {
     High: '#dc2626',
     Medium: '#f97316',
     Low: '#6b7280',
+  }
+
+  const handleIgnoreRecommendation = () => {
+    if (!asset) return
+    updateAsset({ ...asset, recommendedDefinitionId: undefined })
+    addToast({ type: 'info', title: 'Recommendation Dismissed', message: 'The catalog recommendation has been removed from this asset.' })
+  }
+
+  const handleAcceptLink = () => {
+    if (!asset || !recommendedDef) return
+    updateAsset({ ...asset, linkedDefinitionId: recommendedDef.id, recommendedDefinitionId: undefined })
+    setShowAcceptModal(false)
+    addToast({ type: 'success', title: 'Catalog Link Established', message: `${asset.name} is now linked to "${recommendedDef.name}".` })
   }
 
   return (
@@ -109,7 +124,7 @@ export default function WorkOrderDetail() {
           </div>
         </div>
 
-        {/* Asset Information — HC-6049 */}
+        {/* Asset Information */}
         <div className="card">
           <h3 className="card-title">Asset Information</h3>
           {asset ? (
@@ -138,7 +153,7 @@ export default function WorkOrderDetail() {
         </div>
       </div>
 
-      {/* Catalog Definition Panel — shown when asset is linked (HC-6049) */}
+      {/* Catalog Definition Panel — shown when asset is linked */}
       {linkedDef && (
         <div className="card">
           <h3 className="card-title">Catalog Definition — Reference Data</h3>
@@ -169,15 +184,36 @@ export default function WorkOrderDetail() {
         </div>
       )}
 
-      {/* Recommendation note for technicians */}
+      {/* Catalog Recommendation Panel — Flow 4: Technician can accept link */}
       {recommendedDef && (
-        <div className="info-box warning">
-          <span>💡</span>
-          <div>
-            <strong>Catalog recommendation available for this asset.</strong>
-            <div style={{ fontSize: 12, marginTop: 2 }}>
-              A matching definition has been identified: <strong>{recommendedDef.name}</strong>. Ask your Customer Admin to accept the recommendation for enriched asset data.
+        <div className="card">
+          <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>💡</span> Catalog Recommendation
+          </h3>
+          <div className="info-box info" style={{ marginBottom: 16 }}>
+            <span>ℹ</span>
+            <div>
+              <strong>A matching catalog definition has been identified for this asset.</strong>
+              <div style={{ fontSize: 12, marginTop: 2 }}>
+                Linking this asset to <strong>{recommendedDef.name}</strong> will enrich maintenance data with manufacturer specs and lifecycle information.
+              </div>
             </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 24px', marginBottom: 16 }}>
+            <div><div className="detail-label">Definition Name</div><div className="detail-value">{recommendedDef.name}</div></div>
+            <div><div className="detail-label">Manufacturer</div><div className="detail-value">{recommendedDef.manufacturer}</div></div>
+            <div><div className="detail-label">Model</div><div className="detail-value">{recommendedDef.model}</div></div>
+            <div><div className="detail-label">Expected Lifespan</div><div className="detail-value">{recommendedDef.expectedLifespan} years</div></div>
+            <div><div className="detail-label">Category</div><div className="detail-value">{recommendedDef.category}</div></div>
+            <div><div className="detail-label">Version</div><div className="detail-value">v{recommendedDef.version}</div></div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-primary" onClick={() => setShowAcceptModal(true)}>
+              Accept &amp; Link
+            </button>
+            <button className="btn btn-secondary" onClick={handleIgnoreRecommendation}>
+              Dismiss
+            </button>
           </div>
         </div>
       )}
@@ -194,6 +230,39 @@ export default function WorkOrderDetail() {
           </button>
         )}
       </div>
+
+      {/* Accept & Link Confirmation Modal */}
+      {showAcceptModal && recommendedDef && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowAcceptModal(false) }}>
+          <div className="modal-box">
+            <div className="modal-header">
+              <h2 className="modal-title">Accept Catalog Link</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowAcceptModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="info-box info">
+                <span>ℹ</span>
+                <div>
+                  <strong>Link <em>{asset?.name}</em> to <em>{recommendedDef.name}</em>?</strong>
+                  <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                    This will establish a catalog link, giving you access to full manufacturer specifications and lifecycle data for this asset. The recommendation will be cleared.
+                  </p>
+                </div>
+              </div>
+              <div className="detail-grid" style={{ marginTop: 12 }}>
+                <div className="detail-row"><span className="detail-label">Definition</span><span className="detail-value">{recommendedDef.name}</span></div>
+                <div className="detail-row"><span className="detail-label">Manufacturer</span><span className="detail-value">{recommendedDef.manufacturer}</span></div>
+                <div className="detail-row"><span className="detail-label">Model</span><span className="detail-value">{recommendedDef.model}</span></div>
+                <div className="detail-row"><span className="detail-label">Version</span><span className="detail-value">v{recommendedDef.version}</span></div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowAcceptModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAcceptLink}>Confirm Link</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
