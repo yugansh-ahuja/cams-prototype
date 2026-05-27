@@ -56,6 +56,7 @@ export default function CreateDefinition() {
       expectedLifespan: Number(form.expectedLifespan),
       msrp: Number(form.msrp),
       state: 'Draft',
+      source: 'manual',
       version: 1,
       createdDate: new Date().toISOString().split('T')[0],
       specifications: specs.filter(s => s.label.trim() && s.value.trim()),
