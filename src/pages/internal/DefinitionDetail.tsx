@@ -25,12 +25,12 @@ function SourceChip({ source }: { source: DefinitionSource }) {
 
 const CATEGORIES = ['Pumps', 'Security', 'Life Safety', 'Electrical', 'HVAC', 'Mechanical', 'Plumbing', 'IT Infrastructure', 'Other']
 
-type Modal = null | 'confirm-publish' | 'confirm-archive' | 'confirm-restore' | 'confirm-new-version'
+type Modal = null | 'confirm-publish' | 'confirm-archive' | 'confirm-restore' | 'confirm-new-version' | 'confirm-set-active'
 
 export default function DefinitionDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { definitions, assets, updateDefinition, publishDefinition, createNewVersion, archiveDefinition, addToast } = useApp()
+  const { definitions, assets, updateDefinition, publishDefinition, createNewVersion, archiveDefinition, setActiveVersion, addToast } = useApp()
 
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Partial<AssetDefinition>>({})
@@ -38,6 +38,7 @@ export default function DefinitionDetail() {
 
   const [modal, setModal] = useState<Modal>(null)
   const [publishErrors, setPublishErrors] = useState<string[]>([])
+  const [pendingActivateId, setPendingActivateId] = useState<string | null>(null)
 
   const def = definitions.find(d => d.id === id)
 
@@ -133,6 +134,15 @@ export default function DefinitionDetail() {
     addToast({ type: 'success', title: 'Definition Restored', message: `${def.name} has been restored and is now active in the catalog.` })
   }
 
+  const doSetActive = () => {
+    if (!pendingActivateId) return
+    setActiveVersion(pendingActivateId)
+    setModal(null)
+    const v = definitions.find(d => d.id === pendingActivateId)
+    addToast({ type: 'success', title: 'Active Version Changed', message: `v${v?.version} is now the active recommendation for this definition family.` })
+    setPendingActivateId(null)
+  }
+
   const doCreateNewVersion = () => {
     const newId = createNewVersion(def.id)
     setModal(null)
@@ -188,11 +198,10 @@ export default function DefinitionDetail() {
     return <span className="state-badge draft">○ Draft</span>
   }
 
-  const versionStateBadge = (d: AssetDefinition) => {
-    if (d.state === 'Draft')    return <span className="state-badge draft">○ Draft</span>
-    if (d.state === 'Archived') return <span className="state-badge archived">◎ Archived</span>
-    if (d.versionState === 'Active') return <span className="state-badge active">◉ Active</span>
-    return <span className="state-badge inactive">○ Inactive</span>
+  const versionStatusBadge = (d: AssetDefinition) => {
+    if (d.state === 'Draft')     return <span className="state-badge draft">○ Draft</span>
+    if (d.state === 'Archived')  return <span className="state-badge archived">◎ Archived</span>
+    return <span className="state-badge published">● Published</span>
   }
 
   return (
@@ -459,7 +468,9 @@ export default function DefinitionDetail() {
                 <thead>
                   <tr>
                     <th>Version</th>
-                    <th>State</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'center' }}>Active (use for recommendation)</th>
                     <th>Created</th>
                     <th>Published</th>
                     <th>Actions</th>
@@ -477,7 +488,19 @@ export default function DefinitionDetail() {
                           <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--theme-color-soft-text)', fontWeight: 400 }}>(this)</span>
                         )}
                       </td>
-                      <td>{versionStateBadge(v)}</td>
+                      <td><SourceChip source={v.source} /></td>
+                      <td>{versionStatusBadge(v)}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        {v.state === 'Published' && (
+                          <input
+                            type="radio"
+                            name={`active-${familyId}`}
+                            checked={v.versionState === 'Active'}
+                            onChange={() => { setPendingActivateId(v.id); setModal('confirm-set-active') }}
+                            style={{ cursor: 'pointer', accentColor: 'var(--primary)', width: 16, height: 16 }}
+                          />
+                        )}
+                      </td>
                       <td>{v.createdDate}</td>
                       <td>{v.publishedDate ?? '—'}</td>
                       <td>
@@ -625,6 +648,36 @@ export default function DefinitionDetail() {
           </div>
         </div>
       )}
+
+      {/* ── Confirm Set Active modal ──────────────────────────────────────────── */}
+      {modal === 'confirm-set-active' && pendingActivateId && (() => {
+        const target = definitions.find(d => d.id === pendingActivateId)
+        return (
+          <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setModal(null); setPendingActivateId(null) } }}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 className="modal-title">Change Active Version</h2>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setModal(null); setPendingActivateId(null) }}>✕</button>
+              </div>
+              <div className="modal-body">
+                <div className="info-box info">
+                  <span>ℹ</span>
+                  <div>
+                    <strong>Set v{target?.version} as the active recommendation?</strong>
+                    <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                      This version will be shown as the recommended option when a user creates an asset of this definition type. The previously active version will become inactive.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => { setModal(null); setPendingActivateId(null) }}>Cancel</button>
+                <button className="btn btn-primary" onClick={doSetActive}>Set as Active</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }

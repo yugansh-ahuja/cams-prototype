@@ -6,6 +6,7 @@ import AppShell from './components/AppShell'
 import DefinitionList from './pages/internal/DefinitionList'
 import DefinitionDetail from './pages/internal/DefinitionDetail'
 import CreateDefinition from './pages/internal/CreateDefinition'
+import BulkImport from './pages/internal/BulkImport'
 
 // Customer pages
 import AssetList from './pages/customer/AssetList'
@@ -117,7 +118,8 @@ function ProtectedRoutes() {
       <Routes>
         {/* Catalog Admin routes */}
         <Route path="/internal/definitions"      element={<DefinitionList />} />
-        <Route path="/internal/definitions/new"  element={<CreateDefinition />} />
+        <Route path="/internal/definitions/new"    element={<CreateDefinition />} />
+        <Route path="/internal/definitions/import" element={<BulkImport />} />
         <Route path="/internal/definitions/:id"  element={<DefinitionDetail />} />
 
         {/* Customer Admin routes */}

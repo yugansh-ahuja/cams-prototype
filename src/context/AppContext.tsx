@@ -35,6 +35,16 @@ interface AppContextType {
    * Asset links are preserved. Mirrors the doArchive logic centralised for reuse (HC-7521).
    */
   archiveDefinition: (defId: string) => void
+  /**
+   * Publishes a Draft definition as Inactive (HC-NEW). The definition becomes
+   * Published but is not the active recommendation — an operator can activate it later.
+   */
+  publishOnly: (defId: string) => void
+  /**
+   * Swaps the Active version within a Published family (HC-NEW).
+   * The target becomes Active; every other Published sibling becomes Inactive.
+   */
+  setActiveVersion: (defId: string) => void
   updateAsset: (asset: Asset) => void
   addAsset: (asset: Asset) => void
   toasts: Toast[]
@@ -127,6 +137,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newId
   }
 
+  const publishOnly = (defId: string) => {
+    setDefinitions(prev => prev.map(d => {
+      if (d.id !== defId) return d
+      return {
+        ...d,
+        state: 'Published' as const,
+        versionState: 'Inactive' as const,
+        publishedDate: new Date().toISOString().split('T')[0],
+      }
+    }))
+  }
+
+  const setActiveVersion = (defId: string) => {
+    setDefinitions(prev => {
+      const def = prev.find(d => d.id === defId)
+      if (!def) return prev
+      const familyId = def.baseDefinitionId ?? def.id
+      return prev.map(d => {
+        if ((d.baseDefinitionId ?? d.id) === familyId && d.state === 'Published') {
+          return { ...d, versionState: d.id === defId ? 'Active' as const : 'Inactive' as const }
+        }
+        return d
+      })
+    })
+  }
+
   /**
    * HC-7521 — Centralised archive action.
    * Sets state to 'Archived', clears versionState, records archivedDate.
@@ -165,7 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       persona, setPersona,
       definitions, assets, workOrders,
-      updateDefinition, addDefinition, publishDefinition, createNewVersion, archiveDefinition,
+      updateDefinition, addDefinition, publishDefinition, publishOnly, setActiveVersion, createNewVersion, archiveDefinition,
       updateAsset, addAsset,
       toasts, addToast, removeToast,
     }}>
