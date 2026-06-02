@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAMS Catalog Analytics — Pendo Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+  .dashboard { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+  /* Header */
+  .dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .dash-title { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+  .dash-sub { font-size: 13px; color: #666; margin-top: 3px; }
+  .filter-row { display: flex; gap: 10px; }
+  .filter-pill { background: #fff; border: 1px solid #dde1e7; border-radius: 6px; padding: 6px 14px; font-size: 13px; color: #444; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .filter-pill span { color: #3b5bdb; font-weight: 600; }
+
+  /* KPI row */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .kpi-card { background: #fff; border-radius: 10px; border: 1px solid #e8eaf0; padding: 20px 24px; }
+  .kpi-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin-bottom: 8px; }
+  .kpi-value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+  .kpi-change { font-size: 12px; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+  .up { color: #e03131; }
+  .down { color: #2f9e44; }
+  .neutral { color: #888; }
+  .kpi-card.highlight { border-top: 3px solid #3b5bdb; }
+  .kpi-card.warn { border-top: 3px solid #e8590c; }
+  .kpi-card.good { border-top: 3px solid #2f9e44; }
+  .kpi-card.info { border-top: 3px solid #7950f2; }
+
+  /* Section */
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #999; font-weight: 700; margin-bottom: 12px; margin-top: 8px; }
+
+  /* Grid layouts */
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .row-3 { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .row-full { margin-bottom: 16px; }
+
+  /* Card */
+  .card { background: #fff; border-radius: 10px; border: 1px solid #e8eaf0; padding: 20px 24px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; }
+  .card-desc { font-size: 12px; color: #999; margin-bottom: 18px; }
+  .badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+  .badge-blue { background: #e7f5ff; color: #1971c2; }
+  .badge-orange { background: #fff4e6; color: #e8590c; }
+
+  /* Frequency table */
+  .freq-table { width: 100%; border-collapse: collapse; }
+  .freq-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: 600; text-align: left; padding: 0 8px 10px 8px; border-bottom: 1px solid #f0f0f0; }
+  .freq-table td { padding: 10px 8px; font-size: 13px; border-bottom: 1px solid #f8f8f8; vertical-align: middle; }
+  .freq-table tr:last-child td { border-bottom: none; }
+  .freq-table tr:hover td { background: #fafbff; }
+  .rank { color: #bbb; font-size: 12px; font-weight: 600; width: 20px; text-align: right; }
+  .mfr { font-weight: 600; color: #1a1a2e; }
+  .mdl { color: #555; }
+  .cat-chip { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 500; }
+  .cat-pumps { background: #e7f5ff; color: #1971c2; }
+  .cat-hvac { background: #fff0f6; color: #c2255c; }
+  .cat-security { background: #f3f0ff; color: #6741d9; }
+  .cat-electrical { background: #fff9db; color: #e67700; }
+  .cat-lifesafety { background: #ebfbee; color: #2f9e44; }
+  .bar-cell { display: flex; align-items: center; gap: 8px; }
+  .bar-bg { flex: 1; background: #f0f2f5; border-radius: 3px; height: 8px; overflow: hidden; max-width: 180px; }
+  .bar-fill { height: 8px; border-radius: 3px; background: #3b5bdb; transition: width 0.3s; }
+  .bar-fill.high { background: #e03131; }
+  .bar-fill.med { background: #e8590c; }
+  .bar-count { font-size: 13px; font-weight: 700; color: #1a1a2e; min-width: 28px; text-align: right; }
+  .acct-count { font-size: 12px; color: #888; min-width: 60px; }
+
+  /* Horizontal bar chart */
+  .hbar-chart { display: flex; flex-direction: column; gap: 12px; }
+  .hbar-row { display: flex; align-items: center; gap: 12px; }
+  .hbar-label { font-size: 12px; color: #555; width: 80px; text-align: right; flex-shrink: 0; }
+  .hbar-track { flex: 1; background: #f0f2f5; border-radius: 4px; height: 28px; position: relative; overflow: hidden; }
+  .hbar-fill { height: 28px; border-radius: 4px; display: flex; align-items: center; padding-left: 10px; font-size: 12px; font-weight: 700; color: #fff; transition: width 0.5s; }
+  .hbar-val { font-size: 12px; font-weight: 700; color: #555; width: 36px; flex-shrink: 0; }
+
+  /* Trend chart */
+  .trend-chart { position: relative; height: 140px; }
+  .trend-svg { width: 100%; height: 100%; }
+  .trend-label { font-size: 11px; fill: #aaa; }
+  .trend-axis { stroke: #eee; stroke-width: 1; }
+  .trend-line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+  .trend-area { opacity: 0.08; }
+
+  /* Funnel */
+  .funnel { display: flex; flex-direction: column; gap: 0; }
+  .funnel-step { position: relative; }
+  .funnel-bar { border-radius: 6px; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; margin: 0 auto; }
+  .funnel-label { font-size: 13px; font-weight: 600; color: #fff; }
+  .funnel-count { font-size: 13px; font-weight: 700; color: #fff; }
+  .funnel-connector { display: flex; align-items: center; justify-content: center; height: 28px; gap: 6px; }
+  .funnel-rate { font-size: 12px; font-weight: 700; }
+  .funnel-arrow { color: #ccc; font-size: 16px; }
+  .rate-green { color: #2f9e44; }
+  .rate-red { color: #e03131; }
+
+  /* Split bar (accept vs dismiss) */
+  .split-section { display: flex; flex-direction: column; gap: 14px; }
+  .split-row { display: flex; flex-direction: column; gap: 5px; }
+  .split-label { font-size: 12px; color: #666; font-weight: 600; }
+  .split-bar { display: flex; height: 28px; border-radius: 5px; overflow: hidden; }
+  .split-accept { background: #2f9e44; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; }
+  .split-dismiss { background: #e03131; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; }
+  .split-legend { display: flex; gap: 14px; font-size: 11px; color: #888; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+  /* Account table */
+  .acct-table { width: 100%; border-collapse: collapse; }
+  .acct-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: 600; text-align: left; padding: 0 8px 10px 8px; border-bottom: 1px solid #f0f0f0; }
+  .acct-table td { padding: 10px 8px; font-size: 13px; border-bottom: 1px solid #f8f8f8; }
+  .acct-table tr:last-child td { border-bottom: none; }
+  .risk-high { color: #e03131; font-weight: 700; }
+  .risk-med { color: #e8590c; font-weight: 700; }
+  .risk-low { color: #2f9e44; font-weight: 700; }
+  .acct-name { font-weight: 600; }
+
+  /* Paths widget */
+  .paths-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; }
+  .path-col { display: flex; flex-direction: column; gap: 8px; }
+  .path-header { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+  .path-event { background: #f8f9ff; border: 1px solid #e8eaf0; border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
+  .path-event-name { font-size: 12px; font-weight: 600; color: #1a1a2e; }
+  .path-pct { font-size: 13px; font-weight: 700; }
+  .path-pct.dominant { color: #3b5bdb; }
+  .path-pct.warn { color: #e8590c; }
+  .path-pct.ok { color: #2f9e44; }
+  .path-arrow { display: flex; align-items: center; justify-content: center; }
+  .arrow-right { font-size: 18px; color: #ddd; }
+
+  .divider { width: 1px; background: #f0f2f5; }
+</style>
+</head>
+<body>
+<div class="dashboard">
+
+  <!-- Header -->
+  <div class="dash-header">
+    <div>
+      <div class="dash-title">Catalog Connection Health</div>
+      <div class="dash-sub">CAMS · Pendo Analytics · Last 30 days</div>
+    </div>
+    <div class="filter-row">
+      <div class="filter-pill">Date range: <span>Last 30 days ▾</span></div>
+      <div class="filter-pill">Category: <span>All ▾</span></div>
+      <div class="filter-pill">Account: <span>All ▾</span></div>
+    </div>
+  </div>
+
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="kpi-card highlight">
+      <div class="kpi-label">Total Catalog Searches</div>
+      <div class="kpi-value">3,847</div>
+      <div class="kpi-change neutral">↑ 12% vs prev period</div>
+    </div>
+    <div class="kpi-card warn">
+      <div class="kpi-label">Zero-Result Searches</div>
+      <div class="kpi-value">1,204</div>
+      <div class="kpi-change up">↑ 8% vs prev period</div>
+    </div>
+    <div class="kpi-card warn">
+      <div class="kpi-label">Miss Rate</div>
+      <div class="kpi-value">31%</div>
+      <div class="kpi-change up">↑ from 27% prev period</div>
+    </div>
+    <div class="kpi-card info">
+      <div class="kpi-label">Unique Gaps (combos)</div>
+      <div class="kpi-value">89</div>
+      <div class="kpi-change neutral">distinct Mfr+Model pairs</div>
+    </div>
+  </div>
+
+  <!-- Section 2 + Trend -->
+  <div class="section-label">Catalog Gap Analysis</div>
+  <div class="row-3">
+
+    <!-- Top Missing Combinations -->
+    <div class="card">
+      <div class="card-title">
+        Top Missing Combinations
+        <span class="badge badge-orange">Most Requested</span>
+      </div>
+      <div class="card-desc">Manufacturer + Model combos with no catalog match — ranked by search frequency</div>
+      <table class="freq-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Manufacturer</th>
+            <th>Model</th>
+            <th>Category</th>
+            <th style="text-align:right">Frequency</th>
+            <th style="text-align:right">Accounts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rank">1</td>
+            <td><div class="mfr">Grundfos</div></td>
+            <td><div class="mdl">CR 10-12</div></td>
+            <td><span class="cat-chip cat-pumps">Pumps</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill high" style="width:100%"></div></div>
+                <div class="bar-count">214</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">18 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td>
+            <td><div class="mfr">Carrier</div></td>
+            <td><div class="mdl">50XC-048</div></td>
+            <td><span class="cat-chip cat-hvac">HVAC</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill high" style="width:85%"></div></div>
+                <div class="bar-count">182</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">14 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td><div class="mfr">Axis Comm.</div></td>
+            <td><div class="mdl">P3245-V</div></td>
+            <td><span class="cat-chip cat-security">Security</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill med" style="width:67%"></div></div>
+                <div class="bar-count">144</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">11 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td>
+            <td><div class="mfr">Siemens</div></td>
+            <td><div class="mdl">SENTRON 3VA</div></td>
+            <td><span class="cat-chip cat-electrical">Electrical</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill" style="width:52%"></div></div>
+                <div class="bar-count">111</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">9 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td>
+            <td><div class="mfr">Honeywell</div></td>
+            <td><div class="mdl">FACP-FS240</div></td>
+            <td><span class="cat-chip cat-lifesafety">Life Safety</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill" style="width:44%"></div></div>
+                <div class="bar-count">95</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">8 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">6</td>
+            <td><div class="mfr">Trane</div></td>
+            <td><div class="mdl">XR14 4TTR4</div></td>
+            <td><span class="cat-chip cat-hvac">HVAC</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill" style="width:38%"></div></div>
+                <div class="bar-count">81</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">7 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">7</td>
+            <td><div class="mfr">Xylem</div></td>
+            <td><div class="mdl">G&L SSH-100</div></td>
+            <td><span class="cat-chip cat-pumps">Pumps</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill" style="width:29%"></div></div>
+                <div class="bar-count">62</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">6 accts</td>
+          </tr>
+          <tr>
+            <td class="rank">8</td>
+            <td><div class="mfr">Eaton</div></td>
+            <td><div class="mdl">BR150</div></td>
+            <td><span class="cat-chip cat-electrical">Electrical</span></td>
+            <td>
+              <div class="bar-cell">
+                <div class="bar-bg"><div class="bar-fill" style="width:22%"></div></div>
+                <div class="bar-count">47</div>
+              </div>
+            </td>
+            <td class="acct-count" style="text-align:right">5 accts</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Right col: Category breakdown + Trend -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Gaps by Category -->
+      <div class="card" style="flex:1">
+        <div class="card-title">Gaps by Category</div>
+        <div class="card-desc">Zero-result searches per asset category</div>
+        <div class="hbar-chart">
+          <div class="hbar-row">
+            <div class="hbar-label">HVAC</div>
+            <div class="hbar-track"><div class="hbar-fill" style="width:78%;background:#e03131;">78%</div></div>
+            <div class="hbar-val">337</div>
+          </div>
+          <div class="hbar-row">
+            <div class="hbar-label">Pumps</div>
+            <div class="hbar-track"><div class="hbar-fill" style="width:64%;background:#e8590c;">64%</div></div>
+            <div class="hbar-val">276</div>
+          </div>
+          <div class="hbar-row">
+            <div class="hbar-label">Security</div>
+            <div class="hbar-track"><div class="hbar-fill" style="width:47%;background:#f08c00;">47%</div></div>
+            <div class="hbar-val">203</div>
+          </div>
+          <div class="hbar-row">
+            <div class="hbar-label">Electrical</div>
+            <div class="hbar-track"><div class="hbar-fill" style="width:31%;background:#3b5bdb;">31%</div></div>
+            <div class="hbar-val">158</div>
+          </div>
+          <div class="hbar-row">
+            <div class="hbar-label">Life Safety</div>
+            <div class="hbar-track"><div class="hbar-fill" style="width:18%;background:#2f9e44;">18%</div></div>
+            <div class="hbar-val">95</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Trend -->
+    <div class="card">
+      <div class="card-title">Miss Rate Trend</div>
+      <div class="card-desc">Weekly — zero-result searches vs total</div>
+      <div class="trend-chart">
+        <svg class="trend-svg" viewBox="0 0 300 130" preserveAspectRatio="none">
+          <!-- Grid lines -->
+          <line x1="0" y1="20" x2="300" y2="20" class="trend-axis"/>
+          <line x1="0" y1="50" x2="300" y2="50" class="trend-axis"/>
+          <line x1="0" y1="80" x2="300" y2="80" class="trend-axis"/>
+          <line x1="0" y1="110" x2="300" y2="110" class="trend-axis"/>
+          <!-- Y labels -->
+          <text x="295" y="24" text-anchor="end" class="trend-label">600</text>
+          <text x="295" y="54" text-anchor="end" class="trend-label">400</text>
+          <text x="295" y="84" text-anchor="end" class="trend-label">200</text>
+          <!-- Total searches area -->
+          <path d="M10,30 L60,28 L110,25 L160,24 L210,22 L260,20 L280,18" class="trend-line" stroke="#3b5bdb" stroke-width="2"/>
+          <!-- Zero-result area -->
+          <path d="M10,90 L60,85 L110,80 L160,75 L210,70 L260,68 L280,65" class="trend-line" stroke="#e03131" stroke-width="2" stroke-dasharray="0"/>
+          <!-- Area fill for zero result -->
+          <path d="M10,90 L60,85 L110,80 L160,75 L210,70 L260,68 L280,65 L280,110 L10,110 Z" fill="#e03131" opacity="0.07"/>
+          <!-- X axis labels -->
+          <text x="10" y="128" class="trend-label">W1</text>
+          <text x="60" y="128" class="trend-label">W2</text>
+          <text x="110" y="128" class="trend-label">W3</text>
+          <text x="160" y="128" class="trend-label">W4</text>
+          <text x="210" y="128" class="trend-label">W5</text>
+          <text x="260" y="128" class="trend-label">W6</text>
+        </svg>
+      </div>
+      <div class="split-legend" style="margin-top:8px;">
+        <span><span class="dot" style="background:#3b5bdb"></span>Total searches</span>
+        <span><span class="dot" style="background:#e03131"></span>Zero-result</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Section 3 — Recommendation -->
+  <div class="section-label">Recommendation Performance</div>
+  <div class="row-3">
+
+    <!-- Funnel -->
+    <div class="card">
+      <div class="card-title">Recommendation Funnel</div>
+      <div class="card-desc">Match surfaced → accepted or dismissed</div>
+      <div class="funnel">
+        <div class="funnel-step">
+          <div class="funnel-bar" style="background:#3b5bdb;width:100%;">
+            <div class="funnel-label">Recommendation Shown</div>
+            <div class="funnel-count">643</div>
+          </div>
+        </div>
+        <div class="funnel-connector">
+          <span class="funnel-arrow">↓</span>
+          <span class="funnel-rate rate-green">68% accepted</span>
+        </div>
+        <div class="funnel-step">
+          <div class="funnel-bar" style="background:#2f9e44;width:82%;">
+            <div class="funnel-label">Accepted</div>
+            <div class="funnel-count">437</div>
+          </div>
+        </div>
+        <div class="funnel-connector">
+          <span class="funnel-arrow">↓</span>
+          <span class="funnel-rate rate-red">32% dismissed</span>
+        </div>
+        <div class="funnel-step">
+          <div class="funnel-bar" style="background:#e03131;width:50%;">
+            <div class="funnel-label">Dismissed</div>
+            <div class="funnel-count">206</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acceptance by flow -->
+    <div class="card">
+      <div class="card-title">Acceptance Rate by Flow</div>
+      <div class="card-desc">Create flow vs Edit flow comparison</div>
+      <div class="split-section" style="margin-top:8px;">
+        <div class="split-row">
+          <div class="split-label">Create new asset (HC-5635)</div>
+          <div class="split-bar">
+            <div class="split-accept" style="width:74%">74%</div>
+            <div class="split-dismiss" style="width:26%">26%</div>
+          </div>
+          <div class="split-legend">
+            <span><span class="dot" style="background:#2f9e44"></span>Accepted 74%</span>
+            <span><span class="dot" style="background:#e03131"></span>Dismissed 26%</span>
+          </div>
+        </div>
+        <div style="height:16px;"></div>
+        <div class="split-row">
+          <div class="split-label">Edit existing asset (HC-6066)</div>
+          <div class="split-bar">
+            <div class="split-accept" style="width:58%">58%</div>
+            <div class="split-dismiss" style="width:42%">42%</div>
+          </div>
+          <div class="split-legend">
+            <span><span class="dot" style="background:#2f9e44"></span>Accepted 58%</span>
+            <span><span class="dot" style="background:#e03131"></span>Dismissed 42%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Time to decision -->
+    <div class="card">
+      <div class="card-title">Time to Decision</div>
+      <div class="card-desc">How quickly users accept or dismiss</div>
+      <div class="hbar-chart" style="margin-top:4px;">
+        <div class="hbar-row">
+          <div class="hbar-label" style="width:65px;font-size:11px;">0 – 3s</div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:80%;background:#2f9e44;">80% accept</div></div>
+          <div class="hbar-val">280</div>
+        </div>
+        <div class="hbar-row">
+          <div class="hbar-label" style="width:65px;font-size:11px;">3 – 10s</div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:60%;background:#69db7c;">62% accept</div></div>
+          <div class="hbar-val">190</div>
+        </div>
+        <div class="hbar-row">
+          <div class="hbar-label" style="width:65px;font-size:11px;">10 – 30s</div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:40%;background:#f08c00;">40% accept</div></div>
+          <div class="hbar-val">95</div>
+        </div>
+        <div class="hbar-row">
+          <div class="hbar-label" style="width:65px;font-size:11px;">30s+</div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:20%;background:#e03131;">18% accept</div></div>
+          <div class="hbar-val">78</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:12px;">Fast decisions (0–3s) are confident matches. Long dwell + dismiss = bad match quality.</div>
+    </div>
+
+  </div>
+
+  <!-- Section 4 — Account health -->
+  <div class="section-label">Account Health</div>
+  <div class="row-2">
+
+    <div class="card">
+      <div class="card-title">Accounts with Most Catalog Gaps <span class="badge badge-orange">CSM Alert</span></div>
+      <div class="card-desc">Tenants consistently hitting zero-result searches — candidates for manual outreach</div>
+      <table class="acct-table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Miss Searches</th>
+            <th>Unique Gaps</th>
+            <th>Last Miss</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="acct-name">Riverside Medical Center</td>
+            <td>187</td><td>23</td><td>Today</td>
+            <td class="risk-high">High</td>
+          </tr>
+          <tr>
+            <td class="acct-name">Harbor Logistics Inc.</td>
+            <td>143</td><td>18</td><td>Yesterday</td>
+            <td class="risk-high">High</td>
+          </tr>
+          <tr>
+            <td class="acct-name">Eastview School District</td>
+            <td>98</td><td>12</td><td>2d ago</td>
+            <td class="risk-med">Med</td>
+          </tr>
+          <tr>
+            <td class="acct-name">Summit Tower Corp.</td>
+            <td>71</td><td>9</td><td>3d ago</td>
+            <td class="risk-med">Med</td>
+          </tr>
+          <tr>
+            <td class="acct-name">Greenfield Municipality</td>
+            <td>44</td><td>5</td><td>5d ago</td>
+            <td class="risk-low">Low</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Post no-result paths -->
+    <div class="card">
+      <div class="card-title">What Users Do After No Result</div>
+      <div class="card-desc">Next actions following a zero-result catalog search</div>
+      <div class="paths-grid" style="margin-top:8px;">
+        <div class="path-col">
+          <div class="path-header">After miss</div>
+          <div class="path-event" style="background:#fff3bf;border-color:#ffe066;">
+            <div class="path-event-name">catalog_search_<br>no_results</div>
+          </div>
+        </div>
+        <div class="path-arrow" style="margin-top:40px;"><span class="arrow-right">→</span></div>
+        <div class="path-col">
+          <div class="path-header">Next action</div>
+          <div class="path-event">
+            <div class="path-event-name">Save asset anyway (no link)</div>
+            <div class="path-pct warn">51%</div>
+          </div>
+          <div class="path-event">
+            <div class="path-event-name">Retry search (new query)</div>
+            <div class="path-pct dominant">31%</div>
+          </div>
+          <div class="path-event">
+            <div class="path-event-name">Abandon / leave page</div>
+            <div class="path-pct" style="color:#e03131">18%</div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#fff4e6;border-radius:6px;padding:10px 12px;margin-top:14px;font-size:12px;color:#d9480f;">
+        <strong>Signal:</strong> 51% of users save an unlinked asset after a miss — catalog gaps are silently producing unlinked assets at scale.
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>
